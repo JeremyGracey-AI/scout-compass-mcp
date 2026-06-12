@@ -1,0 +1,28 @@
+{
+  "name": "scout-compass-server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "start:http": "MODE=http node dist/index.js",
+    "seed": "node ../demo/seed-vault.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "express": "^5.2.1",
+    "gray-matter": "^4.0.3",
+    "simple-git": "^3.36.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.9.3",
+    "typescript": "^6.0.3"
+  },
+  "type": "module"
+}

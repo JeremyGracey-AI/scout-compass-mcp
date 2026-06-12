@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 560" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect width="980" height="560" fill="#f8fafc"/>
+  <text x="490" y="38" text-anchor="middle" font-size="24" font-weight="700" fill="#0f172a">Scout Compass — Architecture</text>
+  <text x="490" y="60" text-anchor="middle" font-size="13" fill="#64748b">Agent memory and competence under version control · Agents propose, humans promote</text>
+
+  <!-- Foundry agent -->
+  <rect x="40" y="110" width="240" height="130" rx="12" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+  <text x="160" y="140" text-anchor="middle" font-size="15" font-weight="700" fill="#1e3a8a">Microsoft Foundry</text>
+  <text x="160" y="160" text-anchor="middle" font-size="13" fill="#1e3a8a">Agent Service — "Atlas"</text>
+  <text x="160" y="184" text-anchor="middle" font-size="11.5" fill="#334155">multi-step reasoning</text>
+  <text x="160" y="201" text-anchor="middle" font-size="11.5" fill="#334155">plan → recall → act → log</text>
+  <text x="160" y="218" text-anchor="middle" font-size="11.5" fill="#334155">remote MCP tool connection</text>
+
+  <!-- MCP server -->
+  <rect x="380" y="90" width="250" height="180" rx="12" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+  <text x="505" y="118" text-anchor="middle" font-size="15" font-weight="700" fill="#92400e">Compass MCP Server</text>
+  <text x="505" y="136" text-anchor="middle" font-size="12" fill="#92400e">TypeScript · streamable HTTP + stdio</text>
+  <text x="505" y="160" text-anchor="middle" font-size="11.5" fill="#334155">recall_knowledge · get_skill</text>
+  <text x="505" y="177" text-anchor="middle" font-size="11.5" fill="#334155">log_decision · run_audit · list_proposals</text>
+  <text x="505" y="194" text-anchor="middle" font-size="11.5" fill="#334155">approve · reject · revert · memory_log</text>
+  <rect x="400" y="210" width="210" height="42" rx="8" fill="#fde68a"/>
+  <text x="505" y="227" text-anchor="middle" font-size="11" font-weight="700" fill="#78350f">ENFORCED INVARIANT</text>
+  <text x="505" y="243" text-anchor="middle" font-size="10.5" fill="#78350f">agent writes: decisions + proposals only</text>
+
+  <!-- Vault -->
+  <rect x="720" y="80" width="220" height="220" rx="12" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+  <text x="830" y="108" text-anchor="middle" font-size="15" font-weight="700" fill="#14532d">Vault (git repo)</text>
+  <text x="830" y="126" text-anchor="middle" font-size="12" fill="#14532d">Markdown · Obsidian-compatible</text>
+  <text x="745" y="152" font-size="11.5" fill="#334155">decisions/   ← blackbox (agent)</text>
+  <text x="745" y="172" font-size="11.5" fill="#334155">proposed/   ← compass drafts</text>
+  <text x="745" y="192" font-size="11.5" fill="#334155">skills/        ← human gate only</text>
+  <text x="745" y="212" font-size="11.5" fill="#334155">knowledge/ ← human gate only</text>
+  <text x="745" y="232" font-size="11.5" fill="#334155">compass/    ← audit reports</text>
+  <rect x="740" y="248" width="180" height="38" rx="8" fill="#bbf7d0"/>
+  <text x="830" y="264" text-anchor="middle" font-size="10.5" font-weight="700" fill="#14532d">every write = git commit</text>
+  <text x="830" y="279" text-anchor="middle" font-size="10.5" fill="#14532d">[blackbox] · [compass] · [human]</text>
+
+  <!-- Human -->
+  <rect x="380" y="380" width="250" height="120" rx="12" fill="#fce7f3" stroke="#db2777" stroke-width="2"/>
+  <text x="505" y="410" text-anchor="middle" font-size="15" font-weight="700" fill="#831843">Human operator</text>
+  <text x="505" y="432" text-anchor="middle" font-size="11.5" fill="#334155">reads the vault live in Obsidian (graph view)</text>
+  <text x="505" y="450" text-anchor="middle" font-size="11.5" fill="#334155">approves / rejects proposals</text>
+  <text x="505" y="468" text-anchor="middle" font-size="11.5" fill="#334155">git revert = memory rollback</text>
+
+  <!-- Arrows -->
+  <line x1="280" y1="165" x2="376" y2="165" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="328" y="155" text-anchor="middle" font-size="11" fill="#475569">MCP / HTTPS</text>
+
+  <line x1="630" y1="165" x2="716" y2="165" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="673" y="155" text-anchor="middle" font-size="11" fill="#475569">read / write</text>
+
+  <line x1="830" y1="300" x2="634" y2="430" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="765" y="378" text-anchor="middle" font-size="11" fill="#475569">Obsidian live view</text>
+
+  <line x1="505" y1="380" x2="505" y2="274" stroke="#db2777" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+  <text x="585" y="335" text-anchor="middle" font-size="11" font-weight="700" fill="#db2777">human gate: approve / revert</text>
+
+  <!-- Audit loop annotation -->
+  <path d="M 380 250 C 300 290, 300 330, 380 410" fill="none" stroke="#d97706" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+  <text x="268" y="335" text-anchor="middle" font-size="11" fill="#b45309">audit findings →</text>
+  <text x="268" y="350" text-anchor="middle" font-size="11" fill="#b45309">proposals for review</text>
+
+  <text x="490" y="540" text-anchor="middle" font-size="12" fill="#64748b">Agents League @ AI Skills Fest 2026 · Reasoning Agents track · Jeremy Gracey</text>
+</svg>

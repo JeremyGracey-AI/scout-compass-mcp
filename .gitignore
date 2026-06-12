@@ -1,0 +1,7 @@
+node_modules/
+server/dist/
+# The vault is a generated demo artifact with its own inner git repo —
+# a nested .git can't be committed, so `node demo/seed-vault.mjs`
+# regenerates it deterministically after clone.
+vault/
+.DS_Store
