@@ -18,7 +18,9 @@ const write = (rel, content) => {
   fs.writeFileSync(abs, content.trimStart());
 };
 
-// Wipe note folders (keep .git if present)
+// Wipe everything including .git: a take's git log must start clean —
+// deterministic history, not just deterministic files.
+fs.rmSync(path.join(vault, ".git"), { recursive: true, force: true });
 for (const dir of ["decisions", "skills", "knowledge", "proposed", "compass"]) {
   fs.rmSync(path.join(vault, dir), { recursive: true, force: true });
   fs.mkdirSync(path.join(vault, dir), { recursive: true });
@@ -245,17 +247,11 @@ records are append-only, even for humans. Behavior is revertible; history is not
 
 // ---------- Git ----------
 const git = (cmd) => execSync(`git ${cmd}`, { cwd: vault, stdio: "pipe" }).toString().trim();
-if (!fs.existsSync(path.join(vault, ".git"))) {
-  git("init");
-  git('config user.name "scout-compass"');
-  git('config user.email "compass@local"');
-}
+git("init");
+git('config user.name "scout-compass"');
+git('config user.email "compass@local"');
 git("add -A");
-try {
-  git('commit -m "[human] seed vault for demo"');
-} catch {
-  console.log("(vault already at seed state — nothing to commit)");
-}
+git('commit -m "[human] seed vault for demo"');
 
 console.log(`Vault seeded at ${vault}`);
 console.log(git("log --oneline -5"));
