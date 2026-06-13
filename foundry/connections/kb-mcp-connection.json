@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "type": "Microsoft.MachineLearningServices/workspaces/connections",
+  "name": "scout-compass-kb-mcp",
+  "properties": {
+    "category": "RemoteTool",
+    "target": "${KB_MCP_ENDPOINT_URL}",
+    "authType": "ManagedIdentity",
+    "metadata": {
+      "description": "Read-only connection to the Scout-Compass Azure AI Search KB via MCP. Used exclusively by Atlas for knowledge_base_retrieve. The project managed identity must hold Search Index Data Reader (not Contributor) on the search index.",
+      "allowed_tools": ["knowledge_base_retrieve"],
+      "provenance": "IQ answers surface as a distinct tool output — never merged into vault results."
+    }
+  }
+}
