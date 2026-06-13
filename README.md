@@ -45,13 +45,20 @@ flowchart LR
 
 ```
 Foundry Agent ("Atlas")  ──MCP (streamable HTTP)──►  Compass MCP Server (TypeScript)
-   multi-step reasoning        9 tools                    │
-                                                          ▼
-Human ◄── Obsidian (live graph view) ◄────────────  Vault (git repo, Markdown)
-        approves/rejects/reverts                    decisions · skills · knowledge · proposed
+   multi-step reasoning     10 tools                     │
+        │                                                ▼
+        │                          Vault (git repo, Markdown) — GOVERNED MEMORY
+        │                          decisions · skills · knowledge · proposed
+        ▼
+  Microsoft Foundry IQ (Azure AI Search)  ── READ-ONLY GROUNDING (source:foundry-iq),
+  vendor master · org directory · handbook    kept orthogonal to the vault, never merged
+
+Human ◄── Obsidian (live graph view) ◄── Vault     approves / rejects / reverts
 ```
 
-See `docs/architecture.svg` for the full diagram.
+Two retrieval surfaces, deliberately separate: the **vault** is governed memory
+the human owns; **Foundry IQ** is read-only institutional grounding. See
+`docs/architecture.svg` for the full diagram.
 
 ## Tools (MCP surface)
 
@@ -66,6 +73,21 @@ See `docs/architecture.svg` for the full diagram.
 | `reject_proposal` | **human gate** | delete with reason |
 | `revert_memory` | **human gate** | `git revert` a `[compass]`/`[human]` commit. Refuses `[blackbox]` commits: the flight recorder is append-only |
 | `memory_log` | anyone | the audit trail itself |
+| `ground_foundry_iq` | agent | **read-only IQ grounding** — Microsoft Foundry IQ (Azure AI Search KB) for institutional facts (vendor master, org directory, handbook), tagged `source:foundry-iq`. Held separate from vault memory: never merged with `recall_knowledge`, never cited as a vault note |
+
+### Microsoft IQ grounding
+
+Atlas grounds on **Microsoft Foundry IQ** — an Azure AI Search knowledge base of
+institutional reference content (vendor master, org directory, company handbook),
+exposed two ways: a native knowledge attach on the agent and the
+`ground_foundry_iq` tool above. Grounding is held strictly **orthogonal to the
+vault**: results carry `source:foundry-iq` provenance and `[iq:]` citations, are
+never merged or re-ranked with vault recall, and can never mutate or override what
+a human approved. The split is the thesis in one line — **Microsoft governs
+permissions and grounding; Scout Compass governs memory and competence.** Fabric
+IQ and Work IQ are wired as additive siblings (read-only, same orthogonality
+contract) — see `docs/iq-source-decisions.md` for why they're deferred and what
+each would take.
 
 ## Quickstart
 
@@ -85,7 +107,7 @@ and run the demo script in `demo/`.
 ## How this maps to the judging criteria
 
 - **Reasoning / multi-step (20%)** — the full loop on video: plan → recall → act → log → audit → propose → human approve → governed re-run of the same input. The improvement step is itself reasoning you can read: the audit's proposal cites the exact notes the agent overlooked.
-- **Reliability & safety (20%)** — the invariant is enforced in the tool layer, not the prompt: no tool writes active memory; promotion requires the human gate; `revert_memory` refuses to rewrite the blackbox; honest empty citations are a designed signal, never "fixed" server-side; all vault writes are serialized and committed.
+- **Reliability & safety (20%)** — the invariant is enforced in the tool layer, not the prompt: no tool writes active memory; promotion requires the human gate; `revert_memory` refuses to rewrite the blackbox; honest empty citations are a designed signal, never "fixed" server-side; all vault writes are serialized and committed. Read-only **Foundry IQ** grounding is kept orthogonal to the vault — own provenance, never merged or able to override governed memory.
 - **Accuracy (20%)** — citations are server-verified: ids that don't resolve to a real note are flagged `citations_unresolved` in the record (never silently dropped), and `cite_count`/`last_cited` are updated server-side from logged citations, not agent claims.
 - **Creativity (15%)** — agent memory as a human-owned git repo: the git log is the audit trail, `git revert` is rollback, Obsidian is the UI.
 - **UX (15%)** — plain Markdown, live graph view, one-call approval; zero new interfaces to learn.
@@ -107,7 +129,7 @@ end: humans approve what agents propose.
 
 ## Stack
 
-TypeScript · MCP SDK (streamable HTTP + stdio) · Microsoft Foundry Agent Service · simple-git · gray-matter · Obsidian-compatible vault
+TypeScript · MCP SDK (streamable HTTP + stdio) · Microsoft Foundry Agent Service · Microsoft Foundry IQ (Azure AI Search) · simple-git · gray-matter · Obsidian-compatible vault
 
 ---
 
