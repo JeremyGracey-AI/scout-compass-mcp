@@ -175,6 +175,7 @@ function extractReferences(data: unknown, source: string): IqReference[] {
     if (!isRecord(raw)) continue;
     const sourceData = isRecord(raw.sourceData) ? raw.sourceData : {};
     const excerpt =
+      asString(sourceData.snippet) ?? // actual content in 2026-05-01-preview references
       asString(raw.content) ??
       asString(sourceData.content) ??
       asString(sourceData.text) ??
@@ -182,9 +183,10 @@ function extractReferences(data: unknown, source: string): IqReference[] {
     out.push({
       source,
       ref_id: asString(raw.id) ?? asString(raw.docKey) ?? asString(raw.referenceId),
-      title: asString(sourceData.title) ?? asString(raw.title),
+      title: asString(raw.docName) ?? asString(sourceData.title) ?? asString(raw.title),
       excerpt: clip(excerpt, 280),
-      knowledge_source: asString(raw.knowledgeSourceName) ?? asString(raw.sourceName),
+      knowledge_source:
+        asString(raw.knowledgeSourceName) ?? asString(raw.sourceName) ?? asString(raw.docName) ?? asString(raw.type),
     });
   }
 
@@ -218,8 +220,11 @@ async function retrieve(query: string, b: ResolvedBackend): Promise<IqGroundingR
   }
 
   const url = `${b.endpoint!.replace(/\/+$/, "")}/knowledgebases/${encodeURIComponent(b.kb!)}/retrieve?api-version=${b.apiVersion}`;
+  // Knowledge bases at "minimal" retrieval reasoning effort (our config — cheapest,
+  // no LLM query planner, deterministic) take `intents`, not `messages`; each intent
+  // is { type: "semantic", search }. (messages input requires low/medium effort.)
   const body: Record<string, unknown> = {
-    messages: [{ role: "user", content: [{ type: "text", text: query }] }],
+    intents: [{ type: "semantic", search: query }],
   };
   if (b.ksName) {
     body.knowledgeSourceParams = [
@@ -229,7 +234,7 @@ async function retrieve(query: string, b: ResolvedBackend): Promise<IqGroundingR
         includeReferences: true,
         includeReferenceSourceData: true,
         failOnError: false, // favor availability — a flaky source returns partial, not an error
-        maxOutputDocuments: 5,
+        // maxOutputDocuments omitted: the API rejects values <50; the default is fine.
       },
     ];
   }
