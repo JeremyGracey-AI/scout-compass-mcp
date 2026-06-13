@@ -8,7 +8,7 @@ curl https://<tunnel-host>/healthz          # → {"ok":true,...}
 curl -X POST https://<tunnel-host>/mcp \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'   # → 9 tools
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'   # → 10 tools (9 governed + ground_foundry_iq; 9 if FOUNDRY_IQ_* unset)
 ```
 
 ## Portal steps
@@ -21,10 +21,11 @@ curl -X POST https://<tunnel-host>/mcp \
 4. **Tools → Add → MCP (remote)**:
    - Server URL: `https://<tunnel-host>/mcp`
    - Transport: streamable HTTP, no auth (tunnel is anonymous for the demo window)
-   - Approve all 9 tools if the portal asks for per-tool consent.
-5. Sanity ping in the playground: "List your tools." Atlas should name all nine
-   (recall_knowledge, get_skill, log_decision, run_audit, list_proposals,
-   approve_proposal, reject_proposal, revert_memory, memory_log).
+   - Approve all tools if the portal asks for per-tool consent.
+5. Sanity ping in the playground: "List your tools." Atlas should name the
+   governed nine (recall_knowledge, get_skill, log_decision, run_audit, list_proposals,
+   approve_proposal, reject_proposal, revert_memory, memory_log) — plus
+   `ground_foundry_iq` when Foundry IQ grounding is configured (10 total).
 
 If the connection fails: the client must send
 `Accept: application/json, text/event-stream`; the server is stateless
@@ -89,7 +90,8 @@ Claude Desktop as the agent — the governed loop is identical. Add to
 }
 ```
 
-Restart Claude Desktop, confirm the 9 tools appear, and paste the contract
+Restart Claude Desktop, confirm the tools appear (9 governed, or 10 with
+Foundry IQ configured), and paste the contract
 section of `atlas-instructions.md` as the first message of the conversation
 (it is client-agnostic — nothing in it is Foundry-specific).
 

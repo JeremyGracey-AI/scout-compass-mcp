@@ -45,11 +45,22 @@ Honest citation gaps are rewarded by design (they feed the audit). Memory is
 inspectable, diffable, attributable ([blackbox]/[compass]/[human] commits),
 and revocable.
 
+## Microsoft IQ grounding
+
+Atlas grounds on **Microsoft Foundry IQ** — an Azure AI Search knowledge base
+of institutional reference content (vendor master, org directory, handbook) —
+as a read-only layer, exposed both as a native agent knowledge attach and a
+`ground_foundry_iq` MCP tool. Grounding is kept strictly **orthogonal to the
+vault**: own `source:foundry-iq` provenance and `[iq:]` citations, never merged
+with governed memory or able to override a human-approved skill. Microsoft
+governs permissions and grounding; Scout Compass governs memory and competence.
+(Fabric IQ and Work IQ wire in the same way as additive siblings.)
+
 ## Stack
 
-Microsoft Foundry Agent Service · MCP (TypeScript, streamable HTTP) ·
-git (simple-git) · Markdown/YAML (gray-matter) · Obsidian as the human's
-window into the agent's mind.
+Microsoft Foundry Agent Service · Microsoft Foundry IQ (Azure AI Search) ·
+MCP (TypeScript, streamable HTTP) · git (simple-git) · Markdown/YAML
+(gray-matter) · Obsidian as the human's window into the agent's mind.
 
 ## Why now
 

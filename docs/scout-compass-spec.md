@@ -163,6 +163,21 @@ Heuristic 1 is the demo. 2 and 3 can be near-trivial implementations.
   3. If no relevant knowledge found, proceed but log `citations: []` truthfully.
 - Multi-step reasoning showcase = plan → recall → act → log → audit → propose → (human approve) → improved re-run. That loop *is* the track requirement.
 
+### 5.1 Microsoft IQ grounding (added post-spec)
+
+Atlas also grounds on **Microsoft Foundry IQ** (an Azure AI Search knowledge
+base of institutional reference content — vendor master, org directory,
+handbook), exposed both as a native agent knowledge attach and a read-only
+`ground_foundry_iq` MCP tool. Grounding is **orthogonal to the vault**: its
+results carry `source:foundry-iq` provenance and `[iq:]` citations, are never
+merged or re-ranked with `recall_knowledge`, and can never mutate or override a
+human-approved skill — so external grounding can't disturb the governed loop.
+Fabric IQ and Work IQ are additive siblings under the same contract; see
+`docs/iq-source-decisions.md` (why deferred) and `docs/IQ_ORTHOGONALITY.md`
+(the load-bearing separation rule). The split is the thesis at the data layer:
+Microsoft governs permissions and grounding; Scout Compass governs memory and
+competence.
+
 ## 6. Demo scenario & video script (~3.5 min)
 
 **Scenario:** enterprise vendor-email triage (assumption: generic enterprise, not healthcare — broader judge appeal; PREVERA/clinical-audit angle gets one slide as "where this matters most"). Seed vault: 2 skills, 4 knowledge notes, 2 prior decisions.
