@@ -31,6 +31,22 @@ If the connection fails: the client must send
 (`sessionIdGenerator: undefined`). Re-test with the curl above to isolate
 tunnel vs. Foundry.
 
+## The two agents (run 1 vs run 2)
+
+Live testing (June 12, gpt-4.1) showed the full contract works *too* well
+for run 1: Atlas recalls the payment policy and escalates the trap email
+every time — no freelance, nothing for the audit to catch. The demo
+therefore uses two agents against the same MCP server:
+
+- **Atlas — day 0** (`atlas-day0-instructions.md`): minimal prompt, no
+  recall-first or escalation rules. Runs the trap email in run 1 and
+  freelances (confirms net-60, logs `citations: []`).
+- **Atlas** (`atlas-instructions.md`): the full contract. Runs the audit
+  relay and run 2, following the promoted skill to `needs_human`.
+
+Say it plainly on camera: the contract is just a prompt — Compass's audit
+catches the freelance regardless of which agent (or model) produced it.
+
 ## Trap-email test protocol (run BEFORE recording — at least 3 times)
 
 The single highest-risk behavior: **Atlas must log honestly-empty citations
