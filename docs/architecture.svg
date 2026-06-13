@@ -1,10 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 560" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 700" font-family="Segoe UI, Helvetica, Arial, sans-serif">
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
     </marker>
   </defs>
-  <rect width="980" height="560" fill="#f8fafc"/>
+  <rect width="980" height="700" fill="#f8fafc"/>
   <text x="490" y="38" text-anchor="middle" font-size="24" font-weight="700" fill="#0f172a">Scout Compass — Architecture</text>
   <text x="490" y="60" text-anchor="middle" font-size="13" fill="#64748b">Agent memory and competence under version control · Agents propose, humans promote</text>
 
@@ -65,5 +65,15 @@
   <text x="268" y="335" text-anchor="middle" font-size="11" fill="#b45309">audit findings →</text>
   <text x="268" y="350" text-anchor="middle" font-size="11" fill="#b45309">proposals for review</text>
 
-  <text x="490" y="540" text-anchor="middle" font-size="12" fill="#64748b">Agents League @ AI Skills Fest 2026 · Reasoning Agents track · Jeremy Gracey</text>
+  <!-- Microsoft IQ grounding layer (read-only, additive, isolated from the vault) -->
+  <rect x="60" y="560" width="360" height="112" rx="12" fill="#e0e7ff" stroke="#4f46e5" stroke-width="2"/>
+  <text x="240" y="588" text-anchor="middle" font-size="15" font-weight="700" fill="#3730a3">Microsoft IQ — grounding (read-only)</text>
+  <text x="240" y="608" text-anchor="middle" font-size="11.5" fill="#334155">Foundry IQ · Azure AI Search KB · (Fabric IQ · Work IQ additive)</text>
+  <text x="240" y="625" text-anchor="middle" font-size="11" fill="#334155">Atlas: knowledge_base_retrieve · server: ground_{foundry,fabric,work}_iq</text>
+  <rect x="80" y="634" width="320" height="30" rx="8" fill="#c7d2fe"/>
+  <text x="240" y="653" text-anchor="middle" font-size="10.5" font-weight="700" fill="#3730a3">grounding, not memory · source-tagged · never merged into the vault</text>
+  <line x1="240" y1="556" x2="168" y2="242" stroke="#4f46e5" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+  <text x="120" y="400" text-anchor="middle" font-size="11" font-weight="700" fill="#4f46e5">read-only grounding</text>
+
+  <text x="490" y="688" text-anchor="middle" font-size="12" fill="#64748b">Agents League @ AI Skills Fest 2026 · Reasoning Agents track · Jeremy Gracey</text>
 </svg>

@@ -18,6 +18,8 @@ The governed loop, demonstrated end to end: the agent recalls knowledge, acts, a
 
 The stack is deliberately small and inspectable: a TypeScript MCP server (streamable HTTP + stdio), a plain-Markdown vault, and git. No database, no embeddings — the vault is the database, and the git log is the audit trail.
 
+Microsoft's IQ layer is integrated as read-only grounding across all three workloads — Foundry IQ (Azure AI Search knowledge base), Fabric IQ (ontology/semantic model), and Work IQ (M365 context) — surfaced as source-tagged tools (`ground_foundry_iq` / `ground_fabric_iq` / `ground_work_iq`) plus the Foundry-attached `knowledge_base_retrieve`, all kept strictly separate from vault memory so grounding can never mutate or override what a human approved.
+
 Regulated industries — healthcare first — cannot deploy autonomous agents without exactly this: decision provenance, human-gated capability change, and revocable memory, in 100% inspectable plain text.
 
 Scout Compass spans the full skill lifecycle — a companion authoring toolkit (Scout-Compass / skill-forge) covers how skills are built and installed; this entry governs how an agent uses and improves them at run-time. Same principle end to end: humans approve what agents propose.

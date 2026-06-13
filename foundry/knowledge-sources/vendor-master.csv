@@ -1,0 +1,11 @@
+vendor_id,legal_name,category,region,status,onboarded_date,primary_contact_email
+VEN-1002,Umbrella Logistics LLC,Freight & logistics,US-West,active,2023-02-14,ap-team@umbrella-logistics.example
+VEN-1005,Soylent Foods Co,Office catering,US-West,active,2022-11-03,orders@soylentfoods.example
+VEN-1011,Wayne Industrial Supply,Facilities & MRO,US-Central,active,2021-07-22,sales@wayne-industrial.example
+VEN-1019,Stark Office Solutions,Office furniture,US-West,active,2024-01-09,accounts@starkoffice.example
+VEN-1026,Wonka Catering Group,Events catering,US-East,inactive,2020-05-18,events@wonkacatering.example
+VEN-1033,Tyrell Cloud Services,SaaS & hosting,US-West,active,2023-09-30,billing@tyrellcloud.example
+VEN-1040,Gekko Print & Mail,Print services,US-East,active,2022-03-12,support@gekkoprint.example
+VEN-1047,Hooli Telecom,Connectivity,US-West,active,2021-12-01,enterprise@hooli-telecom.example
+VEN-1054,Pied Piper Storage,Data archival,US-West,pending,2025-04-27,hello@piedpiperstorage.example
+VEN-1061,Vandelay Imports,Industrial parts,US-East,active,2022-08-15,sales@vandelay-imports.example

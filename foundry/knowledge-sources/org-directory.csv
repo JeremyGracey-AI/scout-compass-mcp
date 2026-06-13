@@ -1,0 +1,11 @@
+employee_id,name,title,department,location,manager
+EMP-0001,Dana Whitfield,Chief Operating Officer,Operations,San Mateo,—
+EMP-0007,Marcus Lee,VP Engineering,Engineering,Remote,Dana Whitfield
+EMP-0012,Priya Nair,Director of Design,Design,Austin,Dana Whitfield
+EMP-0021,Tom Alvarez,Engineering Manager — Platform,Engineering,Remote,Marcus Lee
+EMP-0034,Sofia Ramos,Senior Backend Engineer,Engineering,Remote,Tom Alvarez
+EMP-0039,Ben Carter,Product Designer,Design,Austin,Priya Nair
+EMP-0046,Aisha Khan,People Operations Lead,People,San Mateo,Dana Whitfield
+EMP-0052,Leo Nguyen,IT Help Desk Lead,IT,San Mateo,Marcus Lee
+EMP-0058,Grace Okafor,Workplace Ops Coordinator,Operations,San Mateo,Dana Whitfield
+EMP-0063,Sam Patel,Technical Writer,Engineering,Remote,Tom Alvarez

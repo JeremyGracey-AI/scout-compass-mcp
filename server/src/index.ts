@@ -17,10 +17,10 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { Vault } from "./vault.js";
 import { VaultGit } from "./git.js";
 import { registerTools } from "./tools.js";
-import { registerGroundingTools } from "./ground.js";
+import { registerGroundingTools, groundingSummary } from "./ground.js";
 
 const VAULT_PATH = path.resolve(process.env.VAULT_PATH ?? path.join(process.cwd(), "..", "vault"));
-const IQ_STATUS = process.env.FOUNDRY_IQ_ENDPOINT ? "IQ grounding: foundry-iq" : "IQ grounding: off";
+const IQ_STATUS = groundingSummary();
 
 function buildServer(): McpServer {
   const vault = new Vault(VAULT_PATH);
