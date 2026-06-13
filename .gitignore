@@ -5,3 +5,7 @@ server/dist/
 # regenerates it deterministically after clone.
 vault/
 .DS_Store
+# Real secrets — only *.env.example (placeholders) is committed.
+.env
+*.env
+!*.env.example
