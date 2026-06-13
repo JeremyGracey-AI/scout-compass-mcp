@@ -20,6 +20,8 @@ The stack is deliberately small and inspectable: a TypeScript MCP server (stream
 
 Regulated industries — healthcare first — cannot deploy autonomous agents without exactly this: decision provenance, human-gated capability change, and revocable memory, in 100% inspectable plain text.
 
+Scout Compass spans the full skill lifecycle — a companion authoring toolkit (Scout-Compass / skill-forge) covers how skills are built and installed; this entry governs how an agent uses and improves them at run-time. Same principle end to end: humans approve what agents propose.
+
 Built solo by Jeremy Gracey — [jeremygracey.ai](https://jeremygracey.ai) · [github.com/JeremyGracey-AI](https://github.com/JeremyGracey-AI)
 
 ---

@@ -96,6 +96,15 @@ Regulated industries — healthcare first — cannot deploy autonomous agents
 without exactly this: decision provenance, human-gated capability change, and
 revocable memory. Scout Compass is the pattern, in 100% inspectable plain text.
 
+## The bigger picture
+
+Scout Compass spans the full skill lifecycle. A companion authoring toolkit,
+[Scout-Compass / skill-forge](https://github.com/JeremyGracey-AI/Scout-Compass),
+handles how skills are *born* — build → preview → install. **This repository
+(`scout-compass-mcp`) governs how an agent *uses and improves* them at
+run-time**, and is the Agents League hackathon entry. Same principle end to
+end: humans approve what agents propose.
+
 ## Stack
 
 TypeScript · MCP SDK (streamable HTTP + stdio) · Microsoft Foundry Agent Service · simple-git · gray-matter · Obsidian-compatible vault
