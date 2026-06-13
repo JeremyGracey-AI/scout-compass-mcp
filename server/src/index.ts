@@ -17,8 +17,10 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { Vault } from "./vault.js";
 import { VaultGit } from "./git.js";
 import { registerTools } from "./tools.js";
+import { registerGroundingTools } from "./ground.js";
 
 const VAULT_PATH = path.resolve(process.env.VAULT_PATH ?? path.join(process.cwd(), "..", "vault"));
+const IQ_STATUS = process.env.FOUNDRY_IQ_ENDPOINT ? "IQ grounding: foundry-iq" : "IQ grounding: off";
 
 function buildServer(): McpServer {
   const vault = new Vault(VAULT_PATH);
@@ -26,13 +28,16 @@ function buildServer(): McpServer {
   void git.ensureRepo();
   const server = new McpServer({ name: "scout-compass", version: "0.1.0" });
   registerTools(server, vault, git);
+  // Additive, read-only IQ grounding. No-op (registers nothing) unless FOUNDRY_IQ_* is set,
+  // so the governed loop stays byte-for-byte identical when IQ is unconfigured.
+  registerGroundingTools(server);
   return server;
 }
 
 async function mainStdio(): Promise<void> {
   const server = buildServer();
   await server.connect(new StdioServerTransport());
-  console.error(`[scout-compass] stdio mode, vault: ${VAULT_PATH}`);
+  console.error(`[scout-compass] stdio mode, vault: ${VAULT_PATH} | ${IQ_STATUS}`);
 }
 
 async function mainHttp(): Promise<void> {
@@ -58,7 +63,7 @@ async function mainHttp(): Promise<void> {
 
   const port = Number(process.env.PORT ?? 3000);
   app.listen(port, () => {
-    console.error(`[scout-compass] http mode on :${port}/mcp, vault: ${VAULT_PATH}`);
+    console.error(`[scout-compass] http mode on :${port}/mcp, vault: ${VAULT_PATH} | ${IQ_STATUS}`);
   });
 }
 
