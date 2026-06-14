@@ -184,7 +184,7 @@ function extractReferences(data: unknown, source: string): IqReference[] {
       source,
       ref_id: asString(raw.id) ?? asString(raw.docKey) ?? asString(raw.referenceId),
       title: asString(raw.docName) ?? asString(sourceData.title) ?? asString(raw.title),
-      excerpt: clip(excerpt, 280),
+      excerpt: clip(excerpt, 2400),
       knowledge_source:
         asString(raw.knowledgeSourceName) ?? asString(raw.sourceName) ?? asString(raw.docName) ?? asString(raw.type),
     });
