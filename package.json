@@ -1,0 +1,13 @@
+{
+  "name": "scout-compass",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Repo-root manifest so the harness's deterministic edge (check.sh) actually gates the files this repo changes. check.sh walks up from the edited file to the first Cargo.toml/pyproject.toml/package.json/.git; before this file existed the walk from demo/ and bin/ stopped at the repo's .git, which matches no check branch — so edits to demo/seed-vault.mjs and bin/approve.mjs were UNGATED while the Day 1 write-up claimed they were wired (2026-08-02 invigilation finding 5). test delegates to the same hermetic suite server/package.json runs.",
+  "type": "module",
+  "scripts": {
+    "build": "npm --prefix server run build",
+    "seed": "node demo/seed-vault.mjs",
+    "test": "node demo/test-hermetic.mjs"
+  },
+  "license": "ISC"
+}
