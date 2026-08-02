@@ -277,10 +277,18 @@ step(18, "a CONFLICTING revert is aborted and refused — never left mid-flight 
   // recycles ids). Verified by hand: "CONFLICT (add/add)" plus a staged
   // "D compass/rulings.json" and .git/REVERT_HEAD. Before this fix that throw
   // escaped uncaught and every later commit — every later tool call — failed.
-  const r = parse(await toolset.revert_memory.handler({ commit_sha: rejectSha }));
-  console.log(`  ${String(r.error ?? JSON.stringify(r)).slice(0, 160)}`);
-  check(typeof r.error === "string" && r.error.startsWith("Refused"), "conflicting revert refused cleanly (no uncaught throw)");
-  check(r.revert_aborted === true, "git revert --abort was run");
+  // A conflict is a runtime failure, so it throws (the [blackbox]/[seed] policy
+  // refusals answer as data) — per the [human] ruling's "clean throw" wording.
+  // "Clean" is the load-bearing word: aborted, tree clean, next call works.
+  let thrown = null;
+  try {
+    await toolset.revert_memory.handler({ commit_sha: rejectSha });
+  } catch (e) {
+    thrown = e;
+  }
+  console.log(`  ${String(thrown?.message).slice(0, 170)}`);
+  check(thrown instanceof Error && thrown.message.startsWith("Refused"), "conflicting revert threw a clean, named error");
+  check(String(thrown?.message).includes("revert --abort ran"), "git revert --abort was run");
   check(!fs.existsSync(path.join(vaultPath, ".git", "REVERT_HEAD")), "no REVERT_HEAD left behind");
   check((await git.dirtyPaths()).length === 0, "no staged deletions: working tree clean");
   const d4 = parse(await toolset.log_decision.handler({

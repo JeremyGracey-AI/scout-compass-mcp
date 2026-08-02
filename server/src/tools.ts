@@ -208,26 +208,28 @@ export function createToolset(vault: Vault, git: VaultGit): Record<string, ToolD
             return text({ reverted: commit_sha, revert_commit: newSha });
           } catch (e) {
             // A conflicted revert left mid-flight leaves REVERT_HEAD and staged
-            // deletions, and every later tool call fails on commit until a human
-            // runs `git revert --abort`. Roll it back here and refuse cleanly.
+            // deletions, and every later tool call then fails on commit until a
+            // human runs `git revert --abort`. Roll it back, then throw a clean
+            // error — the two refusals above are POLICY (a deliberate, expected
+            // "no", so they answer as data); a conflict is a runtime FAILURE and
+            // is signalled as one. Wording per [human] ruling 2026-08-02
+            // (harness decisions/2026-08-02-week3-rulings.md:39-40), which also
+            // keeps this hardening when revert moves to bin/revert.mjs, where a
+            // throw is a nonzero exit.
             const aborted = await git.abortRevert();
             const dirty = await git.dirtyPaths();
-            return text({
-              error:
-                `Refused: reverting ${commit_sha} conflicted with the vault's current state ` +
-                `and was rolled back — nothing was changed. (${(e as Error).message.split("\n")[0]}) ` +
-                "This usually means the commit's changes were already undone, or later commits " +
-                "touched the same files. Revert the most recent commit carrying the behavior instead.",
-              commit: subject,
-              revert_aborted: aborted,
-              ...(dirty.length
-                ? {
-                    warning:
-                      "The vault working tree is NOT clean after the abort — a human should inspect it: " +
-                      dirty.slice(0, 10).join("; "),
-                  }
-                : {}),
-            });
+            throw new Error(
+              `Refused: reverting ${commit_sha} (${subject}) conflicted with the vault's ` +
+                `current state and was rolled back — nothing was changed ` +
+                `[revert --abort ${aborted ? "ran" : "was not needed / failed"}]. ` +
+                `(${(e as Error).message.split("\n")[0]}) This usually means the commit's changes ` +
+                `were already undone, or later commits touched the same files. Revert the most ` +
+                `recent commit carrying the behavior instead.` +
+                (dirty.length
+                  ? ` WARNING: the vault working tree is NOT clean after the abort — a human ` +
+                    `should inspect it: ${dirty.slice(0, 10).join("; ")}`
+                  : ""),
+            );
           }
         }),
     },
