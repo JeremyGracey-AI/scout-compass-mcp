@@ -231,8 +231,9 @@ pending proposals — plain Markdown, Obsidian-compatible, under git.
 
 **Invariant:** the agent never writes to \`skills/\` or \`knowledge/\` directly.
 Its only write paths are decision records (\`decisions/\`) and proposals
-(\`proposed/\`). A human promotes proposals via \`approve_proposal\`. Every
-write is a git commit: \`[blackbox]\`, \`[compass]\`, or \`[human]\`.
+(\`proposed/\`). A human promotes or rejects proposals from their own terminal
+via \`bin/approve.mjs\` / \`bin/reject.mjs\` — approval is not an agent tool.
+Every write is a git commit: \`[blackbox]\`, \`[compass]\`, or \`[human]\`.
 \`revert_memory\` rolls back \`[compass]\`/\`[human]\` commits only — decision
 records are append-only, even for humans. Behavior is revertible; history is not.
 
