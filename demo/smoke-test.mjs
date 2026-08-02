@@ -99,6 +99,12 @@ console.log(`  ${d1.decision_id} committed ${String(d1.commit).slice(0, 8)}`);
 check(vault.get(d1.decision_id) !== null, "decision record written");
 
 step(4, "run_audit handler — all three heuristics fire, findings carry severity");
+// Fail-closed ledger, the legitimate side (finding 3): a freshly seeded vault has
+// NO compass/rulings.json, and that absence must read as "nothing ruled yet".
+check(
+  !fs.existsSync(path.join(vaultPath, vault.rulingsRel)) && vault.rulings().length === 0,
+  "absent compass/rulings.json = legitimate first run (rulings() -> [])",
+);
 const a1 = parse(await toolset.run_audit.handler({}));
 a1.findings.forEach((f) => console.log(`  ${f.heuristic} [${f.severity}] → ${f.subject}${f.proposal_id ? ` → drafted ${f.proposal_id}` : ""}`));
 for (const h of ["uncited-decision", "stale-skill", "low-confidence-repeat"]) {
@@ -145,7 +151,9 @@ step(6, "vault-layer gate: promotion/removal without a named human REFUSES");
 step(7, "human rejects via bin/reject.mjs (their own process — the real boundary)");
 console.log(cli("reject.mjs", [propA, "--by", "jeremy", "--reason", "smoke: rejecting the first draft"]).trimEnd().replace(/^/gm, "  "));
 check(vault.get(propA) === null, `${propA} deleted`);
-const rejectSubject = (await git.recentLog(1))[0].message;
+const rejectLog = (await git.recentLog(1))[0];
+const rejectSha = rejectLog.sha;
+const rejectSubject = rejectLog.message;
 check(/^\[human\] reject prop-\d+: .+ \(by jeremy\)$/.test(rejectSubject), `commit line: ${rejectSubject}`);
 const rulings1 = vault.rulings();
 check(
@@ -216,7 +224,78 @@ check(vault.get(promotedId) === null, `skill ${promotedId} gone after revert`);
 check(vault.get(propB) !== null, `proposal ${propB} restored to the queue`);
 check(vault.rulings().length === 1, "approval ruling reverted with the approval (reject ruling remains)");
 
-step(16, "git log (the audit trail)");
+step(16, "truncated compass/rulings.json FAILS CLOSED — no mass re-propose (finding 3)");
+{
+  const rulingsAbs = path.join(vaultPath, vault.rulingsRel);
+  const intact = fs.readFileSync(rulingsAbs, "utf8");
+  const before = vault.list("proposal").map((p) => p.id).sort().join(",");
+  // Simulate the partial write / truncated read the finding describes.
+  fs.writeFileSync(rulingsAbs, intact.slice(0, Math.max(1, Math.floor(intact.length / 2))));
+  let refusal = null;
+  try {
+    await toolset.run_audit.handler({});
+  } catch (e) {
+    refusal = e.message;
+  }
+  console.log(`  refused: ${String(refusal).slice(0, 120)}`);
+  check(typeof refusal === "string" && refusal.includes("rulings.json"), "run_audit threw on a damaged ruling ledger instead of reading it as []");
+  check(vault.list("proposal").map((p) => p.id).sort().join(",") === before, "0 proposals drafted while the ledger was unreadable (no mass re-propose)");
+  check(fs.readFileSync(rulingsAbs, "utf8").length < intact.length, "the damaged ledger was NOT rewritten by a follow-on appendRuling");
+  fs.writeFileSync(rulingsAbs, intact); // restore: the ledger is git-tracked and intact upstream
+  const a5 = parse(await toolset.run_audit.handler({}));
+  check(!a5.findings.some((f) => f.heuristic === "uncited-decision" && f.subject === d1.decision_id), "after restoring the ledger, run_audit works and still honours the ruling");
+}
+
+step(17, "revert_memory of the [seed] baseline is REFUSED — vault survives, next call works (finding 2)");
+{
+  const log = await git.recentLog(50);
+  const seed = log.find((l) => l.message.startsWith("[seed] "));
+  const notesBefore = ["knowledge", "skill", "decision"].map((t) => `${t}:${vault.list(t).length}`).join(" ");
+  const r = parse(await toolset.revert_memory.handler({ commit_sha: seed.sha }));
+  console.log(`  ${seed.sha} ${seed.message}\n  ${r.error ?? JSON.stringify(r)}`);
+  check(typeof r.error === "string" && r.error.startsWith("Refused"), "revert_memory refused the [seed] baseline commit");
+  const notesAfter = ["knowledge", "skill", "decision"].map((t) => `${t}:${vault.list(t).length}`).join(" ");
+  check(notesAfter === notesBefore, `vault intact: ${notesAfter} (was ${notesBefore})`);
+  check(!fs.existsSync(path.join(vaultPath, ".git", "REVERT_HEAD")), "no REVERT_HEAD left behind");
+  check((await git.dirtyPaths()).length === 0, "working tree clean after the refusal");
+  const d3 = parse(await toolset.log_decision.handler({
+    task: "Post-refusal liveness probe",
+    trigger: "user_request",
+    plan: "1. Confirm the governed surface still works after a refused revert",
+    citations: ["kn-payment-policy"],
+    actions: "Logged a decision.",
+    outcome: "completed",
+    confidence: 0.9,
+  }));
+  check(typeof d3.decision_id === "string" && vault.get(d3.decision_id) !== null, `log_decision still works after the refusal (${d3.decision_id})`);
+}
+
+step(18, "a CONFLICTING revert is aborted and refused — never left mid-flight (finding 2 blast radius)");
+{
+  // Reverting the [human] reject commit conflicts for real: it would re-add
+  // proposed/prop-001.md, and a DIFFERENT prop-001.md exists today (nextId
+  // recycles ids). Verified by hand: "CONFLICT (add/add)" plus a staged
+  // "D compass/rulings.json" and .git/REVERT_HEAD. Before this fix that throw
+  // escaped uncaught and every later commit — every later tool call — failed.
+  const r = parse(await toolset.revert_memory.handler({ commit_sha: rejectSha }));
+  console.log(`  ${String(r.error ?? JSON.stringify(r)).slice(0, 160)}`);
+  check(typeof r.error === "string" && r.error.startsWith("Refused"), "conflicting revert refused cleanly (no uncaught throw)");
+  check(r.revert_aborted === true, "git revert --abort was run");
+  check(!fs.existsSync(path.join(vaultPath, ".git", "REVERT_HEAD")), "no REVERT_HEAD left behind");
+  check((await git.dirtyPaths()).length === 0, "no staged deletions: working tree clean");
+  const d4 = parse(await toolset.log_decision.handler({
+    task: "Post-conflict liveness probe",
+    trigger: "user_request",
+    plan: "1. Confirm commits still succeed after an aborted revert",
+    citations: ["kn-payment-policy"],
+    actions: "Logged a decision.",
+    outcome: "completed",
+    confidence: 0.9,
+  }));
+  check(typeof d4.decision_id === "string" && vault.get(d4.decision_id) !== null, `log_decision still works after the aborted revert (${d4.decision_id})`);
+}
+
+step(19, "git log (the audit trail)");
 console.log((await git.recentLog(12)).map((l) => `  ${l.sha} ${l.message}`).join("\n"));
 
 if (failed) {

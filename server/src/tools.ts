@@ -168,7 +168,9 @@ export function createToolset(vault: Vault, git: VaultGit): Record<string, ToolD
       description:
         "HUMAN GATE: git-revert a memory commit (a [compass] proposal or [human] approval). " +
         "Decision records are append-only: [blackbox] commits cannot be reverted, even by a human — " +
-        "behavior is revertible, history is not.",
+        "behavior is revertible, history is not. The [seed] baseline / root commit is not " +
+        "revertible either: reverting it deletes the whole vault rather than rolling back a behavior. " +
+        "A revert that conflicts is rolled back (git revert --abort) and refused, never left in flight.",
       inputSchema: { commit_sha: z.string() },
       handler: async ({ commit_sha }) =>
         withVaultLock(async () => {
@@ -183,8 +185,50 @@ export function createToolset(vault: Vault, git: VaultGit): Record<string, ToolD
               commit: subject,
             });
           }
-          const newSha = await git.revert(commit_sha);
-          return text({ reverted: commit_sha, revert_commit: newSha });
+          // Baseline guard (2026-08-02 invigilation finding 2): reverting the
+          // commit that CREATED the vault is not a behavior rollback — git
+          // diffs a root commit against the empty tree, so the revert deletes
+          // every note, then conflicts. Refused on either signal: the [seed]
+          // subject convention, or the structural fact of having no parent.
+          const rootless = await git.isRootCommit(commit_sha);
+          if (subject.startsWith("[seed] ") || rootless) {
+            return text({
+              error:
+                "Refused: this is the vault's baseline commit " +
+                (rootless ? "(no parent — the root commit)" : "(a [seed] commit)") +
+                ". Reverting it deletes the entire vault rather than rolling back a behavior; " +
+                "it is also the commit that CREATED the append-only decision records, so " +
+                "reverting it would erase history through the back door. Revert the specific " +
+                "[compass] or [human] commit whose behavior you want undone.",
+              commit: subject,
+            });
+          }
+          try {
+            const newSha = await git.revert(commit_sha);
+            return text({ reverted: commit_sha, revert_commit: newSha });
+          } catch (e) {
+            // A conflicted revert left mid-flight leaves REVERT_HEAD and staged
+            // deletions, and every later tool call fails on commit until a human
+            // runs `git revert --abort`. Roll it back here and refuse cleanly.
+            const aborted = await git.abortRevert();
+            const dirty = await git.dirtyPaths();
+            return text({
+              error:
+                `Refused: reverting ${commit_sha} conflicted with the vault's current state ` +
+                `and was rolled back — nothing was changed. (${(e as Error).message.split("\n")[0]}) ` +
+                "This usually means the commit's changes were already undone, or later commits " +
+                "touched the same files. Revert the most recent commit carrying the behavior instead.",
+              commit: subject,
+              revert_aborted: aborted,
+              ...(dirty.length
+                ? {
+                    warning:
+                      "The vault working tree is NOT clean after the abort — a human should inspect it: " +
+                      dirty.slice(0, 10).join("; "),
+                  }
+                : {}),
+            });
+          }
         }),
     },
 

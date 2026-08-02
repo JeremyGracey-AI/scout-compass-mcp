@@ -95,21 +95,61 @@ export class Vault {
   /** Relative path of the rulings ledger — include it in the [human] commit. */
   readonly rulingsRel = path.join("compass", "rulings.json");
 
-  /** All human rulings, oldest first. Missing or unreadable file = no rulings (first run). */
+  /**
+   * All human rulings, oldest first. FAIL-CLOSED (2026-08-02 invigilation
+   * finding 3): only an ABSENT file means "no rulings yet" — a legitimate first
+   * run. A file that exists but does not parse into an array is a DAMAGED
+   * ledger and throws, because the two ways it was previously swallowed into
+   * `[]` are both destructive:
+   *   - `runAudit` (audit.ts:39) dedupes on this list, so `[]` silently
+   *     re-proposes every decision a human already ruled on;
+   *   - `appendRuling` below rewrites the whole file from this list, so the
+   *     next ruling would replace an "append-only ledger" of N entries with
+   *     one entry — destroying prior rulings on a partial read.
+   * Refusing to act is the only safe reading of a ledger we cannot read.
+   */
   rulings(): Ruling[] {
     const abs = path.join(this.root, this.rulingsRel);
-    if (!fs.existsSync(abs)) return [];
+    if (!fs.existsSync(abs)) return []; // legitimate first run: nothing ruled yet
+    let raw: string;
     try {
-      const parsed = JSON.parse(fs.readFileSync(abs, "utf8"));
-      return Array.isArray(parsed) ? (parsed as Ruling[]) : [];
-    } catch {
-      return [];
+      raw = fs.readFileSync(abs, "utf8");
+    } catch (e) {
+      throw new Error(
+        `Vault.rulings(): ${this.rulingsRel} exists but is unreadable (${(e as Error).message}). ` +
+          `Refusing to treat a damaged ruling ledger as "no rulings" — restore it from git ` +
+          `(git -C <vault> checkout -- ${this.rulingsRel}) before running the audit again.`,
+      );
     }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      throw new Error(
+        `Vault.rulings(): ${this.rulingsRel} is present but unparseable JSON (${(e as Error).message}). ` +
+          `Refusing to treat a damaged ruling ledger as "no rulings": the audit would re-propose ` +
+          `every already-ruled-on decision, and the next ruling would overwrite the ledger with a ` +
+          `single entry. Restore it from git (git -C <vault> checkout -- ${this.rulingsRel}).`,
+      );
+    }
+    if (!Array.isArray(parsed)) {
+      throw new Error(
+        `Vault.rulings(): ${this.rulingsRel} parsed as ${parsed === null ? "null" : typeof parsed}, ` +
+          `expected a JSON array of rulings. Refusing to treat a damaged ruling ledger as "no rulings". ` +
+          `Restore it from git (git -C <vault> checkout -- ${this.rulingsRel}).`,
+      );
+    }
+    return parsed as Ruling[];
   }
 
+  /**
+   * Append one ruling. Reads through rulings(), so a damaged ledger throws HERE
+   * too — the write never happens, and the prior entries survive on disk.
+   */
   private appendRuling(ruling: Ruling): void {
     const abs = path.join(this.root, this.rulingsRel);
-    fs.writeFileSync(abs, JSON.stringify([...this.rulings(), ruling], null, 2) + "\n");
+    const existing = this.rulings();
+    fs.writeFileSync(abs, JSON.stringify([...existing, ruling], null, 2) + "\n");
   }
 
   /**

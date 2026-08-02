@@ -51,6 +51,42 @@ export class VaultGit {
     }
   }
 
+  /**
+   * True if `sha` has no parent — the root commit. Reverting a root commit
+   * diffs it against the empty tree, i.e. deletes the entire vault (2026-08-02
+   * invigilation finding 2: one call removed 8/9 knowledge notes, 4/4 skills
+   * and 5/7 decisions). Callers refuse before ever reaching `revert`.
+   */
+  async isRootCommit(sha: string): Promise<boolean> {
+    try {
+      const out = (await this.git.raw(["rev-list", "--parents", "-n", "1", sha])).trim();
+      return out.split(/\s+/).filter(Boolean).length === 1; // "<sha>" alone = no parents
+    } catch {
+      return false; // unresolvable sha: the caller's `subject()` check reports it
+    }
+  }
+
+  /**
+   * Roll back an in-flight revert (`git revert --abort`). Returns true if the
+   * abort ran. A conflicted revert that is left mid-flight leaves REVERT_HEAD
+   * and staged deletions in the index, which makes EVERY subsequent commit —
+   * i.e. every subsequent tool call — fail until a human intervenes.
+   */
+  async abortRevert(): Promise<boolean> {
+    try {
+      await this.git.raw(["revert", "--abort"]);
+      return true;
+    } catch {
+      return false; // nothing in flight, or the abort itself failed — caller reports dirtyPaths()
+    }
+  }
+
+  /** `git status --porcelain` lines; [] means a clean working tree and index. */
+  async dirtyPaths(): Promise<string[]> {
+    const out = await this.git.raw(["status", "--porcelain"]);
+    return out.split("\n").map((l) => l.trim()).filter(Boolean);
+  }
+
   async revert(sha: string): Promise<string> {
     await this.git.raw(["revert", "--no-edit", sha]);
     const log = await this.git.log({ maxCount: 1 });
