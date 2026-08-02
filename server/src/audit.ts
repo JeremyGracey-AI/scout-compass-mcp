@@ -11,8 +11,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { Vault, type Note } from "./vault.js";
 
+export type Severity = "critical" | "warning" | "info";
+
 export interface Finding {
   heuristic: "uncited-decision" | "stale-skill" | "low-confidence-repeat";
+  severity: Severity; // uncited-decision=critical, low-confidence-repeat=warning, stale-skill=info
   subject: string; // note id
   detail: string;
   proposal_id?: string;
@@ -30,11 +33,15 @@ export function runAudit(vault: Vault, now: string): { findings: Finding[]; repo
   const alreadyProposedFor = new Set(
     existingProposals.map((p) => String(p.data.evidence ?? "")),
   );
+  // Idempotency: a decision a human already ruled on (approved OR rejected —
+  // compass/rulings.json) is never re-proposed, even though the proposal file
+  // itself is gone from proposed/ after the ruling.
+  const alreadyRuledOn = new Set(vault.rulings().map((r) => r.decision_id));
 
   // 1. Uncited decisions → skill proposal
   for (const dec of decisions) {
     const citations = Array.isArray(dec.data.citations) ? dec.data.citations : [];
-    if (citations.length === 0 && !alreadyProposedFor.has(dec.id)) {
+    if (citations.length === 0 && !alreadyProposedFor.has(dec.id) && !alreadyRuledOn.has(dec.id)) {
       const propId = vault.nextId("prop");
       const taskLine = String(dec.data.task ?? dec.title);
       // Re-run recall over the task the agent just performed: anything that
@@ -88,14 +95,14 @@ export function runAudit(vault: Vault, now: string): { findings: Finding[]; repo
         ].join("\n"),
       );
       proposalRelPaths.push(rel);
-      findings.push({ heuristic: "uncited-decision", subject: dec.id, detail: `0 citations on "${taskLine}"`, proposal_id: propId });
+      findings.push({ heuristic: "uncited-decision", severity: "critical", subject: dec.id, detail: `0 citations on "${taskLine}"`, proposal_id: propId });
     }
   }
 
   // 2. Stale skills
   for (const skill of skills) {
     if (Number(skill.data.cite_count ?? 0) === 0 && skill.data.status === "active") {
-      findings.push({ heuristic: "stale-skill", subject: skill.id, detail: "active skill never cited — review or deprecate" });
+      findings.push({ heuristic: "stale-skill", severity: "info", subject: skill.id, detail: "active skill never cited — review or deprecate" });
     }
   }
 
@@ -112,6 +119,7 @@ export function runAudit(vault: Vault, now: string): { findings: Finding[]; repo
     if (decs.length >= 2) {
       findings.push({
         heuristic: "low-confidence-repeat",
+        severity: "warning",
         subject: decs.map((d) => d.id).join(", "),
         detail: `${decs.length} low-confidence decisions for trigger "${trigger}" — likely knowledge gap`,
       });
@@ -119,6 +127,7 @@ export function runAudit(vault: Vault, now: string): { findings: Finding[]; repo
   }
 
   // Write the report
+  const bySeverity = (s: Severity) => findings.filter((f) => f.severity === s).length;
   const reportId = `audit-${now.slice(0, 10)}-${Date.now() % 100000}`;
   const lines = [
     `---`,
@@ -127,6 +136,9 @@ export function runAudit(vault: Vault, now: string): { findings: Finding[]; repo
     `timestamp: ${now}`,
     `decisions_reviewed: ${decisions.length}`,
     `findings: ${findings.length}`,
+    `findings_critical: ${bySeverity("critical")}`,
+    `findings_warning: ${bySeverity("warning")}`,
+    `findings_info: ${bySeverity("info")}`,
     `---`,
     ``,
     `# Compass audit — ${now}`,
@@ -135,7 +147,7 @@ export function runAudit(vault: Vault, now: string): { findings: Finding[]; repo
       ? ["No findings. All decisions cited, all skills exercised."]
       : findings.map(
           (f) =>
-            `- **${f.heuristic}** → ${f.subject}: ${f.detail}${f.proposal_id ? ` → drafted [[${f.proposal_id}]]` : ""}`,
+            `- **${f.heuristic}** [${f.severity}] → ${f.subject}: ${f.detail}${f.proposal_id ? ` → drafted [[${f.proposal_id}]]` : ""}`,
         )),
   ];
   const abs = path.join(vault.root, "compass", `${reportId}.md`);

@@ -18,6 +18,20 @@ export interface Note {
   body: string;
 }
 
+/**
+ * A human ruling on a proposal — the append-only ledger entry behind
+ * compass/rulings.json. The audit's dedupe consults this so a ruled-on
+ * decision is never re-proposed, even after the proposal file is gone.
+ */
+export interface Ruling {
+  decision_id: string;
+  proposal_id: string;
+  disposition: "approved" | "rejected";
+  by: string;
+  date: string;
+  reason?: string;
+}
+
 const FOLDERS: Record<NoteType, string> = {
   decision: "decisions",
   skill: "skills",
@@ -78,15 +92,71 @@ export class Vault {
     return path.relative(this.root, abs);
   }
 
-  remove(id: string): string | null {
+  /** Relative path of the rulings ledger — include it in the [human] commit. */
+  readonly rulingsRel = path.join("compass", "rulings.json");
+
+  /** All human rulings, oldest first. Missing or unreadable file = no rulings (first run). */
+  rulings(): Ruling[] {
+    const abs = path.join(this.root, this.rulingsRel);
+    if (!fs.existsSync(abs)) return [];
+    try {
+      const parsed = JSON.parse(fs.readFileSync(abs, "utf8"));
+      return Array.isArray(parsed) ? (parsed as Ruling[]) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private appendRuling(ruling: Ruling): void {
+    const abs = path.join(this.root, this.rulingsRel);
+    fs.writeFileSync(abs, JSON.stringify([...this.rulings(), ruling], null, 2) + "\n");
+  }
+
+  /**
+   * The structural human gate. Every promotion/removal path funnels through
+   * this: no actor, no write — a caller that cannot name a human cannot rule.
+   * (Threat model: this gates the tool-scoped MCP agent, which has no
+   * approve/reject tool at all. A filesystem peer owns the repo and is
+   * outside this boundary — stated, not pretended away.)
+   */
+  private static requireActor(by: unknown, op: string): string {
+    if (typeof by !== "string" || by.trim().length === 0) {
+      throw new Error(
+        `Vault.${op}() requires an explicit human actor: pass a non-empty \`by\` (who ruled on this?)`,
+      );
+    }
+    return by.trim();
+  }
+
+  /**
+   * Remove a note. Requires an explicit human actor (`by`) — the reject path.
+   * Removing a proposal records a "rejected" ruling in compass/rulings.json.
+   */
+  remove(id: string, by: string, reason?: string): string | null {
+    const actor = Vault.requireActor(by, "remove");
     const note = this.get(id);
     if (!note) return null;
     fs.unlinkSync(note.path);
+    if (note.type === "proposal") {
+      this.appendRuling({
+        decision_id: String(note.data.evidence ?? ""),
+        proposal_id: note.id,
+        disposition: "rejected",
+        by: actor,
+        date: new Date().toISOString(),
+        ...(reason ? { reason } : {}),
+      });
+    }
     return note.relPath;
   }
 
-  /** Move a proposal into skills/ or knowledge/, flipping status to active. */
-  promote(proposal: Note): string {
+  /**
+   * Move a proposal into skills/ or knowledge/, flipping status to active.
+   * Requires an explicit human actor (`by`) — records an "approved" ruling
+   * in compass/rulings.json. There is deliberately no default actor.
+   */
+  promote(proposal: Note, by: string): string {
+    const actor = Vault.requireActor(by, "promote");
     const target: NoteType = proposal.data.proposed_type === "knowledge" ? "knowledge" : "skill";
     const prefix = target === "skill" ? "skill" : "kn";
     const { id: _i, type: _t, proposed_type: _p, status: _s, ...rest } = proposal.data;
@@ -96,6 +166,13 @@ export class Vault {
       version: 1,
     }, proposal.body);
     fs.unlinkSync(proposal.path);
+    this.appendRuling({
+      decision_id: String(proposal.data.evidence ?? ""),
+      proposal_id: proposal.id,
+      disposition: "approved",
+      by: actor,
+      date: new Date().toISOString(),
+    });
     return rel;
   }
 
