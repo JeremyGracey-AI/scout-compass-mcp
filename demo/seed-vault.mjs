@@ -2,7 +2,17 @@
 /**
  * seed-vault.mjs — resets vault/ to the exact pre-demo state and commits it.
  * Run from anywhere: node demo/seed-vault.mjs [vaultPath]
- * Deterministic on purpose: the demo must be reproducible on camera.
+ * Deterministic on purpose: the demo must be reproducible on camera — fixed
+ * strings only, no Date.now()/randomness anywhere in the seeded content.
+ *
+ * The seed commit is `[seed]`, not `[human]`: no human reviewed this content,
+ * and CONVENTIONS forbids minting [human] for unreviewed work (2026-08-02
+ * invigilation finding 8; [seed] is the archived lineage's own precedent).
+ *
+ * Reseeding wipes the vault's .git — irreversible for whatever history the
+ * vault carried. The harness's standing rule (finding 5): bundle first —
+ *   git -C vault bundle create <archive>.bundle --all
+ * — and commit the bundle before running this script.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -32,8 +42,8 @@ write("knowledge/kn-payment-policy.md", `
 id: kn-payment-policy
 type: knowledge
 tags: [finance, policy, payment, terms, invoice]
-cite_count: 3
-last_cited: 2026-06-10T22:10:00Z
+cite_count: 4
+last_cited: 2026-06-13T16:20:00Z
 ---
 # Payment terms policy
 
@@ -78,14 +88,93 @@ write("knowledge/kn-escalation-contacts.md", `
 id: kn-escalation-contacts
 type: knowledge
 tags: [escalation, finance, approvals, human]
-cite_count: 1
-last_cited: 2026-06-09T18:00:00Z
+cite_count: 2
+last_cited: 2026-06-13T16:20:00Z
 ---
 # Escalation contacts
 
 Finance approvals (terms deviations, amounts over $5,000): route to the
 finance operations lead via the \`needs_human\` outcome. Do not approve on
 the vendor's behalf.
+`);
+
+write("knowledge/kn-meeting-recording-policy.md", `
+---
+id: kn-meeting-recording-policy
+type: knowledge
+tags: [meeting, recording, transcript, consent]
+cite_count: 1
+last_cited: 2026-06-12T17:05:00Z
+---
+# Meeting recording policy
+
+Record a meeting only with every attendee's consent on the call. Transcripts
+stay available for 90 days, then get purged. Summaries go to attendees only —
+see [[skill-meeting-summary]]. External participants get the summary only if
+the meeting owner signs off.
+`);
+
+write("knowledge/kn-supplier-onboarding.md", `
+---
+id: kn-supplier-onboarding
+type: knowledge
+tags: [supplier, onboarding, contract, w9]
+cite_count: 0
+last_cited: null
+---
+# Supplier onboarding checklist
+
+Before any payment commitment to a new supplier: collect a signed contract,
+a W-9, and remittance details, then add a profile note under knowledge/.
+A supplier with no profile note is not yet cleared for payment — route it
+per [[kn-escalation-contacts]].
+`);
+
+write("knowledge/kn-purchase-order-policy.md", `
+---
+id: kn-purchase-order-policy
+type: knowledge
+tags: [finance, purchase-order, procurement]
+cite_count: 0
+last_cited: null
+---
+# Purchase order policy
+
+A purchase order is needed for any purchase above $2,500 (see the Acme
+profile for its contracted PO floor). POs originate in procurement; finance
+matches each PO to its bill before the weekly disbursement run.
+`);
+
+write("knowledge/kn-disbursement-run.md", `
+---
+id: kn-disbursement-run
+type: knowledge
+tags: [finance, disbursement, schedule, remittance]
+cite_count: 0
+last_cited: null
+---
+# Disbursement run schedule
+
+The weekly disbursement run goes out Thursday; the cutoff for inclusion is
+Tuesday 17:00. Remittance advice goes to the supplier contact on file after
+each run. Bills that miss the cutoff roll to the next run — no ad-hoc
+disbursements without finance sign-off.
+`);
+
+write("knowledge/kn-dispute-resolution.md", `
+---
+id: kn-dispute-resolution
+type: knowledge
+tags: [billing, dispute, credit, finance]
+cite_count: 0
+last_cited: null
+---
+# Billing dispute resolution
+
+If a supplier disputes a bill or a charge, freeze the disputed line, ask for
+the statement reference, and reconcile against the PO. Acme's March 2026
+dispute settled via credit memo in nine days — the benchmark. Escalate any
+dispute open past ten business days per [[kn-escalation-contacts]].
 `);
 
 // ---------- Skills ----------
@@ -119,8 +208,8 @@ type: skill
 status: active
 version: 1
 source_decisions: []
-cite_count: 0
-last_cited: null
+cite_count: 1
+last_cited: 2026-06-12T17:05:00Z
 ---
 # Skill: Meeting summary distribution
 
@@ -130,6 +219,51 @@ After a recorded meeting ends and a transcript is available.
 ## Procedure
 1. Extract decisions and action items with owners.
 2. Draft summary; send to attendees only.
+`);
+
+write("skills/skill-renewal-reminder.md", `
+---
+id: skill-renewal-reminder
+type: skill
+status: active
+version: 1
+source_decisions: []
+cite_count: 0
+last_cited: null
+---
+# Skill: Contract renewal reminder
+
+## When to use
+A scheduled reminder fires for an upcoming contract renewal.
+
+## Procedure
+1. \`recall_knowledge\` for the supplier profile; confirm the renewal date.
+2. Draft an internal reminder to procurement with the renewal date and the
+   current contracted rate.
+3. No outreach to the supplier without procurement's go-ahead.
+4. Cite every note relied on in \`log_decision\`.
+`);
+
+write("skills/skill-dispute-handling.md", `
+---
+id: skill-dispute-handling
+type: skill
+status: active
+version: 1
+source_decisions: []
+cite_count: 0
+last_cited: null
+---
+# Skill: Billing dispute handling
+
+## When to use
+A supplier disputes a bill, a charge, or a credit.
+
+## Procedure
+1. \`recall_knowledge\` for [[kn-dispute-resolution]] and the supplier profile.
+2. Freeze the disputed line; never pay a disputed bill.
+3. If still open after ten business days → outcome \`needs_human\`.
+4. Cite every note relied on in \`log_decision\`.
 `);
 
 // ---------- Prior decisions (history makes the vault feel real) ----------
@@ -222,6 +356,68 @@ Drafted reply asking for the signed contract reference; made no commitments.
 completed (confidence 0.5 — no vendor profile existed to verify against)
 `);
 
+write("decisions/dec-004.md", `
+---
+id: dec-004
+type: decision
+agent: atlas
+task: "Distribute the summary for the recorded vendor sync meeting"
+trigger: event
+citations: [skill-meeting-summary, kn-meeting-recording-policy]
+outcome: completed
+confidence: 0.9
+timestamp: 2026-06-12T17:05:00Z
+---
+# Decision: Distribute the summary for the recorded vendor sync meeting
+
+## Plan
+1. Recall the meeting-summary skill and the recording policy
+2. Extract decisions and action items with owners
+3. Send to attendees only — no external sign-off was given
+
+## Evidence consulted
+- [[skill-meeting-summary]]
+- [[kn-meeting-recording-policy]]
+
+## Actions taken
+Sent the summary to the attendee list; logged action items with owners.
+
+## Outcome
+completed (confidence 0.9)
+`);
+
+write("decisions/dec-005.md", `
+---
+id: dec-005
+type: decision
+agent: atlas
+task: "Escalation review for Initech invoice INV-7801 (net-60 terms request)"
+trigger: event
+citations: [kn-payment-policy, kn-escalation-contacts]
+outcome: needs_human
+confidence: 0.85
+timestamp: 2026-06-13T16:20:00Z
+---
+# Decision: Escalation review for Initech invoice INV-7801 (net-60 terms request)
+
+## Plan
+1. Recall payment policy — net-60 deviates from the net-30 standard
+2. Recall escalation guidance — terms deviations go to the finance ops lead
+3. Route to a human; make no commitment
+
+## Evidence consulted
+- [[kn-payment-policy]]
+- [[kn-escalation-contacts]]
+
+## Actions taken
+Drafted a holding reply (no commitment); routed the request to the finance
+operations lead.
+
+## Outcome
+needs_human (confidence 0.85 — policy is explicit that this is not the
+agent's call)
+`);
+
 // ---------- Vault contract (judge-facing) ----------
 write("README.md", `
 # Scout Compass vault
@@ -233,7 +429,8 @@ pending proposals — plain Markdown, Obsidian-compatible, under git.
 Its only write paths are decision records (\`decisions/\`) and proposals
 (\`proposed/\`). A human promotes or rejects proposals from their own terminal
 via \`bin/approve.mjs\` / \`bin/reject.mjs\` — approval is not an agent tool.
-Every write is a git commit: \`[blackbox]\`, \`[compass]\`, or \`[human]\`.
+Every write is a git commit: \`[seed]\` (the generated demo baseline — no
+human authored it), \`[blackbox]\`, \`[compass]\`, or \`[human]\`.
 \`revert_memory\` rolls back \`[compass]\`/\`[human]\` commits only — decision
 records are append-only, even for humans. Behavior is revertible; history is not.
 
@@ -252,7 +449,7 @@ git("init");
 git('config user.name "scout-compass"');
 git('config user.email "compass@local"');
 git("add -A");
-git('commit -m "[human] seed vault for demo"');
+git('commit -m "[seed] seed vault for demo"');
 
 console.log(`Vault seeded at ${vault}`);
 console.log(git("log --oneline -5"));
