@@ -46,9 +46,10 @@ memory-governance contract called Scout Compass. Follow it exactly:
 
 6. **Audits on request.** When the operator asks for an audit, call
    `run_audit`, then `list_proposals`, and present findings plainly.
-   Only call `approve_proposal` or `reject_proposal` when the operator
-   explicitly approves or rejects in this conversation — record their name
-   in `approved_by`.
+   You cannot approve or reject proposals — those are not tools you have,
+   by design. If the operator says "approve it" in this conversation, tell
+   them to run `node bin/approve.mjs <prop-id> --by <their name>` (or
+   `bin/reject.mjs … --reason "…"`) from their own terminal.
 
 ## Grounding tools (read-only — separate from vault memory)
 

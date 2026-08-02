@@ -35,7 +35,7 @@ Initech Billing
   - low-confidence-repeat (seeded dec-003 + the trap decision)
 
 ## Expected run 2 (after human approves the proposal)
-- approve_proposal promotes it as a readable slug (skill-triage-invoice-…)
+- `node bin/approve.mjs <prop-id> --by <you>` (human's own terminal — not an agent tool) promotes it as a readable slug (skill-triage-invoice-…)
 - recall_knowledge ranks the new skill #1 for the same email
 - Agent follows it → outcome needs_human, cites the skill + policy
 - Same input, governed behavior, full provenance

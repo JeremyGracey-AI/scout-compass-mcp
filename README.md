@@ -19,7 +19,7 @@ An agent's entire memory — skills, knowledge, decisions — lives as plain Mar
 - **Blackbox**: every action produces an immutable decision record — plan, evidence cited, actions, outcome, confidence. The git log *is* the audit trail.
 - **Compass**: audit heuristics mine the decision records. Uncited decisions (the agent freelanced) automatically become *draft skill proposals*. A human approves or rejects. Approved skills change the agent's future behavior — auditable, attributable, revertible.
 
-**The invariant (enforced by the server, not by prompt):** the agent's only write paths are decision records and proposals. Promotion into active skills/knowledge happens exclusively through the human-gated `approve_proposal`. **Agents propose; humans promote.** `git revert` is memory rollback — but it only applies to skills and knowledge: decision records are append-only even for humans. **Behavior is revertible; history is not.**
+**The invariant (enforced in structure, not by prompt):** the agent's only write paths are decision records and proposals. Approval is not an agent tool at all — promotion into active skills/knowledge happens exclusively through the human CLIs `bin/approve.mjs` / `bin/reject.mjs`, which run as the human's own process, and the vault layer itself refuses any promotion without a named human actor. **Agents propose; humans promote.** `git revert` is memory rollback — but it only applies to skills and knowledge: decision records are append-only even for humans. **Behavior is revertible; history is not.**
 
 ## The loop
 
@@ -45,7 +45,7 @@ flowchart LR
 
 ```
 Foundry Agent ("Atlas")  ──MCP (streamable HTTP)──►  Compass MCP Server (TypeScript)
-   multi-step reasoning     10 tools                     │
+   multi-step reasoning     8 tools                      │
         │                                                ▼
         │                          Vault (git repo, Markdown) — GOVERNED MEMORY
         │                          decisions · skills · knowledge · proposed
@@ -69,11 +69,22 @@ the human owns; **Foundry IQ** is read-only institutional grounding. See
 | `log_decision` | agent | write the blackbox record (only agent write path) |
 | `run_audit` | human-triggered (via agent) | 3 heuristics: uncited decisions, stale skills, low-confidence repeats. For an uncited decision, Compass re-runs recall over the task and drafts a proposal that cites the existing notes the agent failed to consult — the draft is derived from real vault content, not invented |
 | `list_proposals` | agent | show drafts awaiting review |
-| `approve_proposal` | **human gate** | promote proposal → active memory |
-| `reject_proposal` | **human gate** | delete with reason |
 | `revert_memory` | **human gate** | `git revert` a `[compass]`/`[human]` commit. Refuses `[blackbox]` commits: the flight recorder is append-only |
 | `memory_log` | anyone | the audit trail itself |
 | `ground_foundry_iq` | agent | **read-only IQ grounding** — Microsoft Foundry IQ (Azure AI Search KB) for institutional facts (vendor master, org directory, handbook), tagged `source:foundry-iq`. Held separate from vault memory: never merged with `recall_knowledge`, never cited as a vault note |
+
+**Approve/reject are deliberately absent from this table.** They are not MCP
+tools: a registered approve tool would be a write path into active memory on
+the agent's own surface. Humans rule from their own terminal —
+
+```bash
+node bin/approve.mjs <prop-id> --by <name>              # promote → [human] approve … (by <name>)
+node bin/reject.mjs  <prop-id> --by <name> --reason "…" # delete  → [human] reject … (by <name>)
+```
+
+The actor requirement is enforced in the vault layer (`Vault.promote`/`remove`
+throw without a named human), every ruling is appended to
+`compass/rulings.json`, and the audit never re-proposes a ruled-on decision.
 
 ### Microsoft IQ grounding
 
@@ -98,6 +109,8 @@ node ../demo/seed-vault.mjs            # generates the demo vault (it is not com
 npm start                              # stdio (Claude Desktop / MCP Inspector)
 MODE=http npm start                    # streamable HTTP :3000/mcp (Foundry)
 node ../demo/smoke-test.mjs            # full loop, no LLM required — exits 0 only if every check passes
+npm test                               # same thing: seed + smoke test in one step
+node ../bin/approve.mjs <prop-id> --by <you>   # the human gate (not an MCP tool)
 ```
 
 Wire a Foundry Agent Service agent to `https://<host>/mcp` with the

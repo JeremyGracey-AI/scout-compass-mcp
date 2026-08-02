@@ -8,7 +8,7 @@ curl https://<tunnel-host>/healthz          # → {"ok":true,...}
 curl -X POST https://<tunnel-host>/mcp \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'   # → 10 tools (9 governed + ground_foundry_iq; 9 if FOUNDRY_IQ_* unset)
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'   # → 8 tools (7 governed + ground_foundry_iq; 7 if FOUNDRY_IQ_* unset)
 ```
 
 ## Portal steps
@@ -23,9 +23,10 @@ curl -X POST https://<tunnel-host>/mcp \
    - Transport: streamable HTTP, no auth (tunnel is anonymous for the demo window)
    - Approve all tools if the portal asks for per-tool consent.
 5. Sanity ping in the playground: "List your tools." Atlas should name the
-   governed nine (recall_knowledge, get_skill, log_decision, run_audit, list_proposals,
-   approve_proposal, reject_proposal, revert_memory, memory_log) — plus
-   `ground_foundry_iq` when Foundry IQ grounding is configured (10 total).
+   governed seven (recall_knowledge, get_skill, log_decision, run_audit,
+   list_proposals, revert_memory, memory_log) — plus `ground_foundry_iq` when
+   Foundry IQ grounding is configured (8 total). approve/reject are NOT tools:
+   humans rule via `bin/approve.mjs` / `bin/reject.mjs` on their own machine.
 
 If the connection fails: the client must send
 `Accept: application/json, text/event-stream`; the server is stateless
