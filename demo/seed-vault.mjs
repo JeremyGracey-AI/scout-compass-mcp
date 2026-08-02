@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * seed-vault.mjs — resets vault/ to the exact pre-demo state and commits it.
+ * seed-vault.mjs — resets a vault to the exact pre-demo state and commits it.
  * Run from anywhere: node demo/seed-vault.mjs [vaultPath]
  * Deterministic on purpose: the demo must be reproducible on camera — fixed
  * strings only, no Date.now()/randomness anywhere in the seeded content.
@@ -9,10 +9,17 @@
  * and CONVENTIONS forbids minting [human] for unreviewed work (2026-08-02
  * invigilation finding 8; [seed] is the archived lineage's own precedent).
  *
- * Reseeding wipes the vault's .git — irreversible for whatever history the
- * vault carried. The harness's standing rule (finding 5): bundle first —
+ * Reseeding wipes the target vault's .git — irreversible for whatever history
+ * that vault carried. The harness's standing rule (finding 5): bundle first —
  *   git -C vault bundle create <archive>.bundle --all
- * — and commit the bundle before running this script.
+ * — and commit the bundle before running this script against the real vault.
+ *
+ * Target selection (2026-08-02 invigilation finding 4 — `npm test` used to fire
+ * this script at the REAL demo vault via check.sh, wiping its history including
+ * the [human] approve evidence):
+ *     argv[2]  >  $VAULT_PATH  >  <repo>/vault
+ * `npm test` runs demo/test-hermetic.mjs, which points both at a throwaway dir,
+ * so the deterministic edge can never destroy the demo vault again.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -20,7 +27,10 @@ import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const vault = path.resolve(process.argv[2] ?? path.join(here, "..", "vault"));
+const vault = path.resolve(
+  process.argv[2] ?? process.env.VAULT_PATH ?? path.join(here, "..", "vault"),
+);
+fs.mkdirSync(vault, { recursive: true });
 
 const write = (rel, content) => {
   const abs = path.join(vault, rel);

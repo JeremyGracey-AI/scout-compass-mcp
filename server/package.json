@@ -8,7 +8,7 @@
     "start": "node dist/index.js",
     "start:http": "MODE=http node dist/index.js",
     "seed": "node ../demo/seed-vault.mjs",
-    "test": "node ../demo/seed-vault.mjs && node ../demo/smoke-test.mjs"
+    "test": "node ../demo/test-hermetic.mjs"
   },
   "keywords": [],
   "author": "",

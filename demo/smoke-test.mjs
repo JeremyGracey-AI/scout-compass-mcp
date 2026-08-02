@@ -10,6 +10,11 @@
 //   - the vault-layer actor gate is attacked directly (promote/remove without
 //     a `by`) and must refuse.
 // Run after seed-vault.mjs. Exits 1 on any failed check.
+//
+// Vault target (2026-08-02 invigilation finding 4): argv[2] > $VAULT_PATH >
+// <repo>/vault. `npm test` goes through demo/test-hermetic.mjs, which points
+// this AND seed-vault.mjs at a throwaway dir — the suite is destructive by
+// design (it seeds, promotes, reverts), so it must never run on the real vault.
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -20,7 +25,9 @@ import { createToolset, registerTools } from "../server/dist/tools.js";
 import { registerGroundingTools } from "../server/dist/ground.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const vaultPath = path.join(here, "..", "vault");
+const vaultPath = path.resolve(
+  process.argv[2] ?? process.env.VAULT_PATH ?? path.join(here, "..", "vault"),
+);
 const vault = new Vault(vaultPath);
 const git = new VaultGit(vaultPath);
 await git.ensureRepo();
@@ -40,8 +47,14 @@ const check = (ok, msg) => {
   if (!ok) failed++;
 };
 const parse = (res) => JSON.parse(res.content[0].text);
+// The human CLIs are separate OS processes; VAULT_PATH is passed EXPLICITLY so
+// they cannot silently rule on the real vault while the rest of this run is on
+// scratch (bin/approve.mjs:41, bin/reject.mjs:41 read process.env.VAULT_PATH).
 const cli = (script, args) =>
-  execFileSync(process.execPath, [path.join(here, "..", "bin", script), ...args], { encoding: "utf8" });
+  execFileSync(process.execPath, [path.join(here, "..", "bin", script), ...args], {
+    encoding: "utf8",
+    env: { ...process.env, VAULT_PATH: vaultPath },
+  });
 
 // The toolset under test IS the object registered on the server — one code object.
 const toolset = createToolset(vault, git);
