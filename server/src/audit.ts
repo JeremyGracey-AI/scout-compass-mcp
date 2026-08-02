@@ -4,7 +4,9 @@
  *     cites the existing notes the agent failed to consult. The story is
  *     "the knowledge was in the vault; the agent skipped it; Compass closes
  *     the loop" — the draft is derived from real vault content, not invented.
- *  2. stale-skill       → flag skills never cited across recent decisions
+ *  2. stale-skill       → flag active skills the citation LEDGER never cites,
+ *     and — per the `[human]` ruling below — name the decision(s) that cleared
+ *     any skill that would otherwise be flagged (heuristic stale-skill-cleared)
  *  3. low-confidence-repeat → propose a knowledge-gap note
  */
 import fs from "node:fs";
@@ -14,11 +16,13 @@ import { Vault, type Note } from "./vault.js";
 export type Severity = "critical" | "warning" | "info";
 
 export interface Finding {
-  heuristic: "uncited-decision" | "stale-skill" | "low-confidence-repeat";
-  severity: Severity; // uncited-decision=critical, low-confidence-repeat=warning, stale-skill=info
+  heuristic: "uncited-decision" | "stale-skill" | "stale-skill-cleared" | "low-confidence-repeat";
+  severity: Severity; // uncited-decision=critical, low-confidence-repeat=warning, stale-skill(-cleared)=info
   subject: string; // note id
   detail: string;
   proposal_id?: string;
+  /** stale-skill-cleared only: the decision id(s) whose citations cleared the finding. */
+  cleared_by?: string[];
 }
 
 const CONFIDENCE_FLOOR = 0.6;
@@ -99,10 +103,38 @@ export function runAudit(vault: Vault, now: string): { findings: Finding[]; repo
     }
   }
 
-  // 2. Stale skills
+  // 2. Stale skills — derived from the APPEND-ONLY citation ledger
+  //    (compass/citations.jsonl), never from note frontmatter.
+  //
+  //    `[human]` ruling 2026-08-02 (decisions/2026-08-02-week3-rulings.md:9-25):
+  //    this used to read `cite_count` out of the skill's own frontmatter, which
+  //    log_decision rewrote — so an agent could clear a standing finding about
+  //    itself in one agent-only call, and the report showed only that the
+  //    finding was gone. The counts are now derived, and CLEARING IS NAMED:
+  //    every ACTIVE skill produces exactly one finding — `stale-skill` when the
+  //    ledger holds zero citations for it, `stale-skill-cleared` naming the
+  //    decision id(s) when it holds some. A finding never silently disappears;
+  //    it changes kind, and the new kind says who cleared it. (A human diffing
+  //    two audit reports sees `stale-skill → stale-skill-cleared … dec-006`.)
+  const citedBy = vault.citationsByNote();
   for (const skill of skills) {
-    if (Number(skill.data.cite_count ?? 0) === 0 && skill.data.status === "active") {
-      findings.push({ heuristic: "stale-skill", severity: "info", subject: skill.id, detail: "active skill never cited — review or deprecate" });
+    if (skill.data.status !== "active") continue;
+    const clearedBy = citedBy.get(skill.id) ?? [];
+    if (clearedBy.length === 0) {
+      findings.push({
+        heuristic: "stale-skill",
+        severity: "info",
+        subject: skill.id,
+        detail: "active skill never cited — review or deprecate (0 citations in compass/citations.jsonl)",
+      });
+    } else {
+      findings.push({
+        heuristic: "stale-skill-cleared",
+        severity: "info",
+        subject: skill.id,
+        detail: `not stale: cited by ${clearedBy.join(", ")} (${clearedBy.length} citation(s) in compass/citations.jsonl)`,
+        cleared_by: clearedBy,
+      });
     }
   }
 

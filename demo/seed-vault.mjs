@@ -52,8 +52,6 @@ write("knowledge/kn-payment-policy.md", `
 id: kn-payment-policy
 type: knowledge
 tags: [finance, policy, payment, terms, invoice]
-cite_count: 4
-last_cited: 2026-06-13T16:20:00Z
 ---
 # Payment terms policy
 
@@ -68,8 +66,6 @@ write("knowledge/kn-vendor-acme.md", `
 id: kn-vendor-acme
 type: knowledge
 tags: [vendor, acme, contacts, invoice]
-cite_count: 2
-last_cited: 2026-06-10T22:10:00Z
 ---
 # Vendor profile: Acme Corp
 
@@ -83,8 +79,6 @@ write("knowledge/kn-vendor-globex.md", `
 id: kn-vendor-globex
 type: knowledge
 tags: [vendor, globex, contacts]
-cite_count: 1
-last_cited: 2026-06-09T18:00:00Z
 ---
 # Vendor profile: Globex Ltd
 
@@ -98,8 +92,6 @@ write("knowledge/kn-escalation-contacts.md", `
 id: kn-escalation-contacts
 type: knowledge
 tags: [escalation, finance, approvals, human]
-cite_count: 2
-last_cited: 2026-06-13T16:20:00Z
 ---
 # Escalation contacts
 
@@ -113,8 +105,6 @@ write("knowledge/kn-meeting-recording-policy.md", `
 id: kn-meeting-recording-policy
 type: knowledge
 tags: [meeting, recording, transcript, consent]
-cite_count: 1
-last_cited: 2026-06-12T17:05:00Z
 ---
 # Meeting recording policy
 
@@ -129,8 +119,6 @@ write("knowledge/kn-supplier-onboarding.md", `
 id: kn-supplier-onboarding
 type: knowledge
 tags: [supplier, onboarding, contract, w9]
-cite_count: 0
-last_cited: null
 ---
 # Supplier onboarding checklist
 
@@ -145,8 +133,6 @@ write("knowledge/kn-purchase-order-policy.md", `
 id: kn-purchase-order-policy
 type: knowledge
 tags: [finance, purchase-order, procurement]
-cite_count: 0
-last_cited: null
 ---
 # Purchase order policy
 
@@ -160,8 +146,6 @@ write("knowledge/kn-disbursement-run.md", `
 id: kn-disbursement-run
 type: knowledge
 tags: [finance, disbursement, schedule, remittance]
-cite_count: 0
-last_cited: null
 ---
 # Disbursement run schedule
 
@@ -176,8 +160,6 @@ write("knowledge/kn-dispute-resolution.md", `
 id: kn-dispute-resolution
 type: knowledge
 tags: [billing, dispute, credit, finance]
-cite_count: 0
-last_cited: null
 ---
 # Billing dispute resolution
 
@@ -195,8 +177,6 @@ type: skill
 status: active
 version: 1
 source_decisions: [dec-001, dec-002]
-cite_count: 2
-last_cited: 2026-06-10T22:10:00Z
 ---
 # Skill: Vendor email triage
 
@@ -218,8 +198,6 @@ type: skill
 status: active
 version: 1
 source_decisions: []
-cite_count: 1
-last_cited: 2026-06-12T17:05:00Z
 ---
 # Skill: Meeting summary distribution
 
@@ -238,8 +216,6 @@ type: skill
 status: active
 version: 1
 source_decisions: []
-cite_count: 0
-last_cited: null
 ---
 # Skill: Contract renewal reminder
 
@@ -261,8 +237,6 @@ type: skill
 status: active
 version: 1
 source_decisions: []
-cite_count: 0
-last_cited: null
 ---
 # Skill: Billing dispute handling
 
@@ -428,6 +402,53 @@ needs_human (confidence 0.85 — policy is explicit that this is not the
 agent's call)
 `);
 
+// ---------- Citation ledger (compass/citations.jsonl) ----------
+// `[human]` ruling 2026-08-02 §1 (~/.claude/harness/decisions/
+// 2026-08-02-week3-rulings.md:9-25): citation stats are an APPEND-ONLY ledger,
+// not note frontmatter. Skill and knowledge notes are immutable to the tool
+// surface, so `cite_count`/`last_cited` are gone from the seeded notes above —
+// they are derived from this file now, and NOTHING writes them at runtime.
+// Verified before deleting: the only readers were audit.ts:104 (now reads the
+// ledger) and Vault.markCited (now appends to it); `recall()` scores title,
+// body and tags only (vault.ts), and the harness eval reads task/citations/
+// confidence off DECISION frontmatter — none of them ever read cite_count.
+//
+// The seeded ledger is DERIVED from the seeded decision records above rather
+// than hand-asserted: one line per (decision, cited note), with the decision's
+// own timestamp. That is what makes the seeded stale-skill findings honest —
+// skill-renewal-reminder and skill-dispute-handling are stale because no
+// seeded decision cites them, not because a number in their frontmatter says 0.
+const SEED_CITATIONS = [
+  ["dec-001", ["skill-vendor-triage", "kn-vendor-globex", "kn-payment-policy"], "2026-06-09T18:00:00Z"],
+  ["dec-002", ["kn-vendor-globex", "kn-escalation-contacts"], "2026-06-10T22:10:00Z"],
+  ["dec-003", ["kn-escalation-contacts"], "2026-06-11T15:30:00Z"],
+  ["dec-004", ["skill-meeting-summary", "kn-meeting-recording-policy"], "2026-06-12T17:05:00Z"],
+  ["dec-005", ["kn-payment-policy", "kn-escalation-contacts"], "2026-06-13T16:20:00Z"],
+];
+
+// Drift guard: the table above must match what the decision files actually say.
+// A seeded ledger that disagrees with the seeded records would be exactly the
+// hand-asserted number the ruling removed.
+for (const [decId, cited, ts] of SEED_CITATIONS) {
+  const src = fs.readFileSync(path.join(vault, "decisions", `${decId}.md`), "utf8");
+  const inFile = (src.match(/^citations: \[(.*)\]$/m)?.[1] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  const stamp = src.match(/^timestamp: (.+)$/m)?.[1]?.trim();
+  if (inFile.join("|") !== cited.join("|") || stamp !== ts) {
+    throw new Error(
+      `seed-vault: SEED_CITATIONS drifted from decisions/${decId}.md — ` +
+        `file says [${inFile.join(", ")}] @ ${stamp}, table says [${cited.join(", ")}] @ ${ts}. ` +
+        `The seeded ledger must be derived from the seeded records, not asserted beside them.`,
+    );
+  }
+}
+
+write(
+  "compass/citations.jsonl",
+  SEED_CITATIONS.flatMap(([decision_id, ids, timestamp]) =>
+    ids.map((skill_id) => JSON.stringify({ skill_id, decision_id, timestamp })),
+  ).join("\n") + "\n",
+);
+
 // ---------- Vault contract (judge-facing) ----------
 write("README.md", `
 # Scout Compass vault
@@ -435,14 +456,21 @@ write("README.md", `
 This folder is an agent's entire memory: skills, knowledge, decisions, and
 pending proposals — plain Markdown, Obsidian-compatible, under git.
 
-**Invariant:** the agent never writes to \`skills/\` or \`knowledge/\` directly.
-Its only write paths are decision records (\`decisions/\`) and proposals
-(\`proposed/\`). A human promotes or rejects proposals from their own terminal
-via \`bin/approve.mjs\` / \`bin/reject.mjs\` — approval is not an agent tool.
-Every write is a git commit: \`[seed]\` (the generated demo baseline — no
-human authored it), \`[blackbox]\`, \`[compass]\`, or \`[human]\`.
-\`revert_memory\` rolls back \`[compass]\`/\`[human]\` commits only — decision
-records are append-only, even for humans. Behavior is revertible; history is not.
+**Invariant:** the agent never writes to \`skills/\` or \`knowledge/\` — not
+directly, and not through a side door. Those notes are **immutable to the tool
+surface**: citing one appends a line to \`compass/citations.jsonl\` (append-only)
+instead of editing the note's frontmatter, so citation counts are derived, never
+stored. The agent's only write paths are decision records (\`decisions/\`), that
+ledger, and proposals (\`proposed/\`).
+
+A human promotes, rejects, or reverts from their own terminal via
+\`bin/approve.mjs\` / \`bin/reject.mjs\` / \`bin/revert.mjs --by <name>\` — none
+of the three is an agent tool. Every write is a git commit: \`[seed]\` (the
+generated demo baseline — no human authored it), \`[blackbox]\`, \`[compass]\`,
+or \`[human]\`. A revert rolls back \`[compass]\`/\`[human]\` commits only:
+decision records and the \`[seed]\` baseline are append-only, even for humans.
+Behavior is revertible; history is not. The agent's \`memory_log\` tool can read
+that history but nothing on the agent surface can rewrite it.
 
 | Folder | Who writes | What |
 |---|---|---|
@@ -450,7 +478,7 @@ records are append-only, even for humans. Behavior is revertible; history is not
 | proposed/  | compass audit    | drafted skills/knowledge awaiting approval |
 | skills/    | human gate only  | active procedures the agent must follow |
 | knowledge/ | human gate only  | curated facts and policies |
-| compass/   | compass audit    | audit reports |
+| compass/   | compass audit + append-only ledgers | audit reports, \`citations.jsonl\`, \`rulings.json\` |
 `);
 
 // ---------- Git ----------

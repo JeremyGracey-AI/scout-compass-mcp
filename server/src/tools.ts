@@ -2,12 +2,21 @@
  * tools.ts — the MCP tool surface.
  *
  * GOVERNANCE INVARIANT (enforced in structure, not by prompt):
- *   The agent's ONLY write paths are log_decision and run_audit (which drafts
- *   proposals). There is NO tool that writes active memory: approve/reject are
- *   deliberately not MCP tools at all. Humans rule via bin/approve.mjs and
- *   bin/reject.mjs, which run as the human's own OS process — that process
- *   boundary is the gate — and the actor requirement itself lives in
- *   Vault.promote()/remove(), so any future caller hits the same gate.
+ *   The agent's ONLY write paths are log_decision (a decision record + an
+ *   append-only line in compass/citations.jsonl) and run_audit (which drafts
+ *   proposals). There is NO tool that writes active memory: approve, reject,
+ *   and revert are deliberately not MCP tools at all. Humans rule via
+ *   bin/approve.mjs, bin/reject.mjs and bin/revert.mjs, which run as the
+ *   human's own OS process — that process boundary is the gate — and the actor
+ *   requirement itself lives in Vault.promote()/remove() and
+ *   VaultGit.humanRevert(), so any future caller hits the same gate.
+ *
+ *   Two `[human]` rulings 2026-08-02 (~/.claude/harness/decisions/
+ *   2026-08-02-week3-rulings.md) put the last two holes in this shut:
+ *     1. log_decision no longer rewrites cited notes' frontmatter — skills/
+ *        and knowledge/ are immutable to this surface (vault.ts markCited).
+ *     2. revert_memory left this surface entirely; the agent keeps memory_log
+ *        (read-only) to SEE history but cannot rewrite it.
  *
  * TEST HONESTY: every handler is part of the exported toolset returned by
  * createToolset(); registerTools() is a thin loop over that same object, so
@@ -114,11 +123,15 @@ export function createToolset(vault: Vault, git: VaultGit): Record<string, ToolD
             confidence,
             timestamp: ts,
           }, body);
-          const cited = vault.markCited(citations, ts);
+          // Citations land in the APPEND-ONLY ledger (compass/citations.jsonl),
+          // NOT in the cited notes' frontmatter: skills/ and knowledge/ are
+          // immutable to this surface ([human] ruling 2026-08-02 §1). `ledger`
+          // is [] when nothing resolved, so the commit is just the record.
+          const ledger = vault.markCited(citations, id, ts);
           const sha = await git.commit(
             "blackbox",
             `${id}: ${task} (confidence ${confidence}, ${citations.length} citations)`,
-            [rel, ...cited],
+            [rel, ...ledger],
           );
           return text({
             decision_id: id,
@@ -164,75 +177,17 @@ export function createToolset(vault: Vault, git: VaultGit): Record<string, ToolD
         }),
     },
 
-    revert_memory: {
-      description:
-        "HUMAN GATE: git-revert a memory commit (a [compass] proposal or [human] approval). " +
-        "Decision records are append-only: [blackbox] commits cannot be reverted, even by a human — " +
-        "behavior is revertible, history is not. The [seed] baseline / root commit is not " +
-        "revertible either: reverting it deletes the whole vault rather than rolling back a behavior. " +
-        "A revert that conflicts is rolled back (git revert --abort) and refused, never left in flight.",
-      inputSchema: { commit_sha: z.string() },
-      handler: async ({ commit_sha }) =>
-        withVaultLock(async () => {
-          const subject = await git.subject(commit_sha);
-          if (subject === null) return text({ error: `No such commit: ${commit_sha}` });
-          if (subject.startsWith("[blackbox]")) {
-            return text({
-              error:
-                "Refused: decision records are the flight recorder and are append-only — " +
-                "the blackbox cannot be rewritten, even by a human. Revert the behavior " +
-                "(a [compass] or [human] commit), never the history.",
-              commit: subject,
-            });
-          }
-          // Baseline guard (2026-08-02 invigilation finding 2): reverting the
-          // commit that CREATED the vault is not a behavior rollback — git
-          // diffs a root commit against the empty tree, so the revert deletes
-          // every note, then conflicts. Refused on either signal: the [seed]
-          // subject convention, or the structural fact of having no parent.
-          const rootless = await git.isRootCommit(commit_sha);
-          if (subject.startsWith("[seed] ") || rootless) {
-            return text({
-              error:
-                "Refused: this is the vault's baseline commit " +
-                (rootless ? "(no parent — the root commit)" : "(a [seed] commit)") +
-                ". Reverting it deletes the entire vault rather than rolling back a behavior; " +
-                "it is also the commit that CREATED the append-only decision records, so " +
-                "reverting it would erase history through the back door. Revert the specific " +
-                "[compass] or [human] commit whose behavior you want undone.",
-              commit: subject,
-            });
-          }
-          try {
-            const newSha = await git.revert(commit_sha);
-            return text({ reverted: commit_sha, revert_commit: newSha });
-          } catch (e) {
-            // A conflicted revert left mid-flight leaves REVERT_HEAD and staged
-            // deletions, and every later tool call then fails on commit until a
-            // human runs `git revert --abort`. Roll it back, then throw a clean
-            // error — the two refusals above are POLICY (a deliberate, expected
-            // "no", so they answer as data); a conflict is a runtime FAILURE and
-            // is signalled as one. Wording per [human] ruling 2026-08-02
-            // (harness decisions/2026-08-02-week3-rulings.md:39-40), which also
-            // keeps this hardening when revert moves to bin/revert.mjs, where a
-            // throw is a nonzero exit.
-            const aborted = await git.abortRevert();
-            const dirty = await git.dirtyPaths();
-            throw new Error(
-              `Refused: reverting ${commit_sha} (${subject}) conflicted with the vault's ` +
-                `current state and was rolled back — nothing was changed ` +
-                `[revert --abort ${aborted ? "ran" : "was not needed / failed"}]. ` +
-                `(${(e as Error).message.split("\n")[0]}) This usually means the commit's changes ` +
-                `were already undone, or later commits touched the same files. Revert the most ` +
-                `recent commit carrying the behavior instead.` +
-                (dirty.length
-                  ? ` WARNING: the vault working tree is NOT clean after the abort — a human ` +
-                    `should inspect it: ${dirty.slice(0, 10).join("; ")}`
-                  : ""),
-            );
-          }
-        }),
-    },
+    // NO revert_memory HERE, ON PURPOSE (`[human]` ruling 2026-08-02 §2,
+    // decisions/2026-08-02-week3-rulings.md:27-40). It was labelled "HUMAN
+    // GATE" while sitting on the agent surface with no actor requirement — the
+    // exact property Day 1 removed from approve/reject. The 2026-08-02
+    // invigilation used it, human absent from every call, to re-materialize a
+    // promoted skill with `status: active`, to restore an "approved by jeremy"
+    // ruling, and to delete most of the vault by reverting the seed commit.
+    // Humans now revert via `bin/revert.mjs --by <name> <sha>`; the guards and
+    // the actor gate live in VaultGit.humanRevert() so they cannot drift from
+    // whatever calls them. The agent keeps memory_log below: it can SEE the
+    // history it cannot rewrite.
 
     memory_log: {
       description: "Show the recent git history of the vault — the audit trail itself.",

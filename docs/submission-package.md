@@ -62,7 +62,7 @@ Built solo by Jeremy Gracey — [jeremygracey.ai](https://jeremygracey.ai) · [g
 3. **(1:15)** The trap: an invoice with net-60 terms from an unknown vendor. No skill covers it. Atlas freelances → decision record with `citations: []`, confidence ~0.55.
 4. **(1:45)** Human asks for the audit (`run_audit` is human-triggered — the agent never audits itself unprompted; say this on camera). **The audit shows THREE findings — pan over the report:** uncited decision, stale skill, low-confidence repeat. The drafted proposal's "What the agent missed" section cites `kn-payment-policy` — derived from real vault content, not invented.
 5. **(2:15)** Human approves (one tool call) → slug-named skill promoted. Git log shows `[human] approve`. Re-run the same email → Atlas's recall ranks the new skill #1, follows it, cites it, routes to `needs_human`. Correct behavior, with provenance.
-6. **(2:50)** Rollback beat: `revert_memory` on the approval → behavior reverts. **Optional new beat:** ask Atlas to revert the run-1 *decision* commit → the server refuses on camera — "behavior is revertible, history is not."
+6. **(2:50)** Rollback beat: `node bin/revert.mjs <approval-sha> --by <you>` in the human's own terminal → behavior reverts, and the log shows `[human] revert <sha> (by <you>)`. Say why it is not an agent tool: reverting undoes a human ruling (`[human]` ruling 2026-08-02). **Optional new beat:** point the same CLI at the run-1 *decision* commit → refused on camera — "behavior is revertible, history is not."
 7. **(3:10+)** Close: architecture slide + the invariant ("agents propose, humans promote") + one regulated-industries slide (healthcare decision provenance) — closing slide only, the demo itself stays generic-enterprise.
 
 **Honesty note**

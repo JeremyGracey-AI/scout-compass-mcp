@@ -15,7 +15,7 @@ Scout Compass is a hackathon entry for **Agents League @ AI Skills Fest 2026, Re
 
 ## The one-sentence thesis (protect this in every change)
 
-An agent's entire memory — skills, knowledge, and a blackbox of decision records — lives as plain Markdown in a git repo the human owns; **the agent's only write paths are decisions and proposals, and promotion to active memory requires the human-gated `approve_proposal`** ("agents propose, humans promote"); `git revert` is memory rollback — for skills and knowledge only. **Behavior is revertible; history is not:** `revert_memory` refuses `[blackbox]` commits, so the flight recorder is append-only even for humans.
+An agent's entire memory — skills, knowledge, and a blackbox of decision records — lives as plain Markdown in a git repo the human owns; **the agent's only write paths are decisions and proposals, and promotion to active memory requires the human-gated `approve_proposal`** ("agents propose, humans promote"); `git revert` is memory rollback — for skills and knowledge only, from the human's own terminal (`bin/revert.mjs --by <name>`; it is NOT an agent tool, per the `[human]` ruling of 2026-08-02, because a revert undoes a human ruling). **Behavior is revertible; history is not:** a revert of a `[blackbox]` commit or of the `[seed]` baseline is refused, so the flight recorder is append-only even for humans.
 
 Enforced in `server/src/tools.ts` (no tool writes `skills/` or `knowledge/` directly; the revert guard checks the commit's `[actor]` prefix). Never weaken either, even as a convenience.
 
@@ -94,7 +94,7 @@ Repo public on GitHub (`gh repo create scout-compass --public --source . --push`
 - ESM throughout: imports use `.js` suffixes; never `require()`.
 - Every vault mutation = a git commit with the `[actor] message` convention, **inside `withVaultLock`** (see `git.ts`). Any new write path must do both.
 - Frontmatter contracts (ids `dec-NNN`, `prop-NNN`, `skill-*`, `kn-*`; `overlooked:`, `citations_unresolved:`) are load-bearing for `audit.ts`, the smoke test, and the demo. Change only with matching seed + smoke-test updates.
-- Don't "improve" the trap email — its two failure conditions (net-60 + unknown vendor) are calibrated. Don't touch seeded cite_counts: `skill-meeting-summary` at 0 and `dec-003` at confidence 0.5 exist so heuristics 2 and 3 fire on camera.
+- Don't "improve" the trap email — its two failure conditions (net-60 + unknown vendor) are calibrated. Heuristics 2 and 3 fire on camera because `skill-renewal-reminder` and `skill-dispute-handling` are cited by no seeded decision (staleness is derived from `compass/citations.jsonl`, which the seed derives from the seeded decision records — there are no hand-written `cite_count`s any more, as of the `[human]` ruling of 2026-08-02) and because `dec-003` sits at confidence 0.5. Don't add citations of those two skills to the seeded decisions.
 - Honest-citation behavior is sacred: never fix empty citations server-side; the audit catching them IS the product. (Flagging unresolved ids is detection, not correction — that stays.)
 - **Re-run `node demo/smoke-test.mjs` after ANY server change. It exits 1 on failure now — trust the exit code.**
 - Naming: "a compass *for* the Scout era" — never imply Microsoft affiliation.

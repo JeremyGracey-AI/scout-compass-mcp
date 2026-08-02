@@ -31,7 +31,11 @@ Initech Billing
   - uncited-decision on the trap decision → proposal drafted; its
     "What the agent missed" section cites kn-payment-policy etc. — the
     knowledge existed, the agent skipped it, Compass closed the loop
-  - stale-skill on skill-meeting-summary (seeded, cite_count 0)
+  - stale-skill on skill-renewal-reminder and skill-dispute-handling — the two
+    seeded skills no seeded decision cites (derived from the append-only
+    compass/citations.jsonl ledger, not from a number in their frontmatter).
+    The cited skills appear as stale-skill-cleared, naming the decision that
+    cited them, so a cleared finding is visible rather than absent
   - low-confidence-repeat (seeded dec-003 + the trap decision)
 
 ## Expected run 2 (after human approves the proposal)

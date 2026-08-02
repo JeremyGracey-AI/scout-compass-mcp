@@ -69,22 +69,31 @@ the human owns; **Foundry IQ** is read-only institutional grounding. See
 | `log_decision` | agent | write the blackbox record (only agent write path) |
 | `run_audit` | human-triggered (via agent) | 3 heuristics: uncited decisions, stale skills, low-confidence repeats. For an uncited decision, Compass re-runs recall over the task and drafts a proposal that cites the existing notes the agent failed to consult — the draft is derived from real vault content, not invented |
 | `list_proposals` | agent | show drafts awaiting review |
-| `revert_memory` | **human gate** | `git revert` a `[compass]`/`[human]` commit. Refuses `[blackbox]` commits: the flight recorder is append-only |
-| `memory_log` | anyone | the audit trail itself |
+| `memory_log` | agent | read the audit trail — see the history, cannot rewrite it |
 | `ground_foundry_iq` | agent | **read-only IQ grounding** — Microsoft Foundry IQ (Azure AI Search KB) for institutional facts (vendor master, org directory, handbook), tagged `source:foundry-iq`. Held separate from vault memory: never merged with `recall_knowledge`, never cited as a vault note |
 
-**Approve/reject are deliberately absent from this table.** They are not MCP
-tools: a registered approve tool would be a write path into active memory on
-the agent's own surface. Humans rule from their own terminal —
+**Approve, reject, and revert are deliberately absent from this table.** They
+are not MCP tools: a registered approve tool would be a write path into active
+memory on the agent's own surface, and a registered revert tool undoes a human's
+ruling with no human in the call (`[human]` ruling 2026-08-02 — the 2026-08-02
+invigilation used the old agent-side `revert_memory` to re-materialize a
+promoted skill and to delete most of the vault by reverting the baseline
+commit). Humans rule from their own terminal —
 
 ```bash
 node bin/approve.mjs <prop-id> --by <name>              # promote → [human] approve … (by <name>)
 node bin/reject.mjs  <prop-id> --by <name> --reason "…" # delete  → [human] reject … (by <name>)
+node bin/revert.mjs  <commit-sha> --by <name>           # roll back → [human] revert <sha> (by <name>): …
 ```
 
-The actor requirement is enforced in the vault layer (`Vault.promote`/`remove`
-throw without a named human), every ruling is appended to
-`compass/rulings.json`, and the audit never re-proposes a ruled-on decision.
+The actor requirement is enforced one layer below the CLI (`Vault.promote`/
+`remove` and `VaultGit.humanRevert` throw without a named human), every ruling
+is appended to `compass/rulings.json`, and the audit never re-proposes a
+ruled-on decision. `bin/revert.mjs` reverts `[compass]`/`[human]` commits only:
+it refuses `[blackbox]` records and the `[seed]`/root baseline (exit 1), aborts
+a conflicting revert and says so (exit 3), and refuses to report a revert that
+produced no commit as a success (exit 3) — a governed tool does not make a
+claim it cannot back.
 
 ### Microsoft IQ grounding
 
@@ -120,8 +129,8 @@ and run the demo script in `demo/`.
 ## How this maps to the judging criteria
 
 - **Reasoning / multi-step (20%)** — the full loop on video: plan → recall → act → log → audit → propose → human approve → governed re-run of the same input. The improvement step is itself reasoning you can read: the audit's proposal cites the exact notes the agent overlooked.
-- **Reliability & safety (20%)** — the invariant is enforced in the tool layer, not the prompt: no tool writes active memory; promotion requires the human gate; `revert_memory` refuses to rewrite the blackbox; honest empty citations are a designed signal, never "fixed" server-side; all vault writes are serialized and committed. Read-only **Foundry IQ** grounding is kept orthogonal to the vault — own provenance, never merged or able to override governed memory.
-- **Accuracy (20%)** — citations are server-verified: ids that don't resolve to a real note are flagged `citations_unresolved` in the record (never silently dropped), and `cite_count`/`last_cited` are updated server-side from logged citations, not agent claims.
+- **Reliability & safety (20%)** — the invariant is enforced in the tool layer, not the prompt: no tool writes active memory (skill and knowledge notes are byte-immutable to the agent surface — a citing `log_decision` appends to `compass/citations.jsonl` and leaves every note file untouched, proven by sha256 before/after in the smoke test); promotion and rollback both require the human gate and a named actor; reverting the blackbox or the baseline is refused; honest empty citations are a designed signal, never "fixed" server-side; all vault writes are serialized and committed. Read-only **Foundry IQ** grounding is kept orthogonal to the vault — own provenance, never merged or able to override governed memory.
+- **Accuracy (20%)** — citations are server-verified: ids that don't resolve to a real note are flagged `citations_unresolved` in the record (never silently dropped), and citation counts are **derived** from the append-only `compass/citations.jsonl` ledger rather than stored on the notes, so the audit's stale-skill heuristic reads a record the agent can only append to. When a citation clears a stale-skill finding, the audit report **names the decision that cleared it** — a finding changes kind (`stale-skill` → `stale-skill-cleared → dec-NNN`), it never silently disappears.
 - **Creativity (15%)** — agent memory as a human-owned git repo: the git log is the audit trail, `git revert` is rollback, Obsidian is the UI.
 - **UX (15%)** — plain Markdown, live graph view, one-call approval; zero new interfaces to learn.
 

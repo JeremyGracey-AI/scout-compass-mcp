@@ -5,10 +5,19 @@
 //     finding 4 rules those out),
 //   - agent actions go through the exported toolset handlers — the same code
 //     objects registerTools serves,
-//   - human rulings go through bin/approve.mjs / bin/reject.mjs as real
-//     subprocesses (the process boundary IS the gate),
+//   - human rulings go through bin/approve.mjs / bin/reject.mjs / bin/revert.mjs
+//     as real subprocesses (the process boundary IS the gate),
 //   - the vault-layer actor gate is attacked directly (promote/remove without
 //     a `by`) and must refuse.
+//
+// Covers both `[human]` rulings of 2026-08-02 (~/.claude/harness/decisions/
+// 2026-08-02-week3-rulings.md):
+//   §1 citing a note leaves skills/ and knowledge/ BYTE-IDENTICAL (sha256 before
+//      and after) while compass/citations.jsonl grows; the self-clearing attack
+//      from the invigilation is replayed and must not be silent;
+//   §2 revert_memory is off the agent surface (6 tools) and every guard —
+//      [blackbox], [seed]/root, conflict-abort, empty-revert honesty — holds
+//      through bin/revert.mjs, which refuses without --by.
 // Run after seed-vault.mjs. Exits 1 on any failed check.
 //
 // Vault target (2026-08-02 invigilation finding 4): argv[2] > $VAULT_PATH >
@@ -17,7 +26,8 @@
 // design (it seeds, promotes, reverts), so it must never run on the real vault.
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { Vault } from "../server/dist/vault.js";
 import { VaultGit } from "../server/dist/git.js";
@@ -55,6 +65,32 @@ const cli = (script, args) =>
     encoding: "utf8",
     env: { ...process.env, VAULT_PATH: vaultPath },
   });
+/** Same, but for the paths that must FAIL: returns the real exit code and stderr. */
+const cliTry = (script, args) => {
+  const res = spawnSync(process.execPath, [path.join(here, "..", "bin", script), ...args], {
+    encoding: "utf8",
+    env: { ...process.env, VAULT_PATH: vaultPath },
+  });
+  return { status: res.status, stdout: res.stdout ?? "", stderr: (res.stderr ?? "").trim() };
+};
+
+/** sha256 of every active-memory note — the immutability proof for ruling §1. */
+const noteHashes = () => {
+  const out = {};
+  for (const dir of ["skills", "knowledge"]) {
+    const abs = path.join(vaultPath, dir);
+    if (!fs.existsSync(abs)) continue;
+    for (const f of fs.readdirSync(abs).filter((n) => n.endsWith(".md")).sort()) {
+      out[`${dir}/${f}`] = createHash("sha256").update(fs.readFileSync(path.join(abs, f))).digest("hex");
+    }
+  }
+  return out;
+};
+const ledgerLines = () => {
+  const abs = path.join(vaultPath, vault.citationsRel);
+  if (!fs.existsSync(abs)) return [];
+  return fs.readFileSync(abs, "utf8").split("\n").filter((l) => l.trim());
+};
 
 // The toolset under test IS the object registered on the server — one code object.
 const toolset = createToolset(vault, git);
@@ -70,12 +106,18 @@ step(1, "agent tool surface — real MCP client over registerTools");
   await client.connect(clientTransport);
   const { tools } = await client.listTools();
   const names = tools.map((t) => t.name).sort();
-  console.log(`  tools/list → ${names.join(", ")}`);
+  console.log(`  tools/list (${names.length}) → ${names.join(", ")}`);
   check(!names.includes("approve_proposal"), "approve_proposal is NOT on the agent surface");
   check(!names.includes("reject_proposal"), "reject_proposal is NOT on the agent surface");
-  for (const t of ["recall_knowledge", "get_skill", "log_decision", "run_audit", "list_proposals", "revert_memory", "memory_log"]) {
+  // `[human]` ruling 2026-08-02 §2: revert left the agent surface for bin/revert.mjs.
+  check(!names.includes("revert_memory"), "revert_memory is NOT on the agent surface (moved to bin/revert.mjs)");
+  for (const t of ["recall_knowledge", "get_skill", "log_decision", "run_audit", "list_proposals", "memory_log"]) {
     check(names.includes(t), `governed tool present: ${t}`);
   }
+  // Exactly 6 — not "at least these 6": a tool nobody listed is a tool nobody
+  // reviewed. (registerGroundingTools adds nothing unless FOUNDRY_IQ_* is set;
+  // if that ever changes this trips, which is a true finding, not a flake.)
+  check(names.length === 6, `agent tool surface is exactly 6 tools (got ${names.length})`);
   await client.close();
   await server.close();
 }
@@ -117,6 +159,29 @@ check(sevOf("low-confidence-repeat") === "warning", "low-confidence-repeat is wa
 check(sevOf("stale-skill") === "info", "stale-skill is info");
 const report1 = fs.readFileSync(path.join(vaultPath, a1.report), "utf8");
 check(/findings_critical: \d+/.test(report1) && report1.includes("[critical]"), "severity surfaced in report frontmatter and body");
+// Staleness is now DERIVED from compass/citations.jsonl, not from frontmatter
+// the agent could rewrite (ruling §1). The seeded ledger is derived from the
+// seeded decisions, so the two skills no seeded decision cites are stale, and
+// the two that are cited are reported as cleared BY NAME.
+{
+  const staleOf = (h) => a1.findings.filter((f) => f.heuristic === h).map((f) => f.subject).sort();
+  console.log(`  stale-skill: [${staleOf("stale-skill").join(", ")}]`);
+  console.log(`  stale-skill-cleared: ${a1.findings.filter((f) => f.heuristic === "stale-skill-cleared").map((f) => `${f.subject} ← ${(f.cleared_by ?? []).join(", ")}`).join(" | ")}`);
+  check(
+    staleOf("stale-skill").join(",") === "skill-dispute-handling,skill-renewal-reminder",
+    "stale skills are exactly the two the seeded ledger never cites",
+  );
+  const cleared = a1.findings.filter((f) => f.heuristic === "stale-skill-cleared");
+  check(
+    cleared.some((f) => f.subject === "skill-vendor-triage" && (f.cleared_by ?? []).includes("dec-001")) &&
+      cleared.some((f) => f.subject === "skill-meeting-summary" && (f.cleared_by ?? []).includes("dec-004")),
+    "cited skills are reported as cleared, naming the decision that cited them",
+  );
+  check(
+    report1.includes("stale-skill-cleared") && report1.includes("dec-001"),
+    "the clearing decision id is named in the audit REPORT, not just the tool result",
+  );
+}
 const propA = a1.findings.find((f) => f.heuristic === "uncited-decision" && f.subject === d1.decision_id)?.proposal_id;
 check(Boolean(propA), `proposal drafted for ${d1.decision_id}: ${propA}`);
 
@@ -210,21 +275,136 @@ const a4 = parse(await toolset.run_audit.handler({}));
 check(!a4.findings.some((f) => f.heuristic === "uncited-decision" && f.subject === d2.decision_id), `no uncited-decision finding for ${d2.decision_id}`);
 check(vault.list("proposal").length === 0, "0 proposals drafted after the approval");
 
-step(14, "blackbox revert must be REFUSED — via the real revert_memory handler");
-const r14 = parse(await toolset.revert_memory.handler({ commit_sha: String(d1.commit) }));
-console.log(`  ${r14.error ?? JSON.stringify(r14)}`);
-check(typeof r14.error === "string" && r14.error.startsWith("Refused"), "revert_memory refused the [blackbox] commit");
-check(vault.get(d1.decision_id) !== null, "decision record still present");
+step(14, "NOTE IMMUTABILITY: a citing log_decision leaves skills/ + knowledge/ BYTE-IDENTICAL (ruling §1)");
+{
+  // The 2026-08-02 invigilation's finding 1: log_decision → Vault.markCited
+  // rewrote each cited note's cite_count/last_cited — an agent-only write to
+  // ACTIVE memory. Proof it is gone: sha256 every skills/*.md and knowledge/*.md
+  // before and after, through the REAL log_decision handler.
+  const before = noteHashes();
+  const ledgerBefore = ledgerLines();
+  const cited = ["skill-vendor-triage", "kn-payment-policy", "kn-escalation-contacts", "kn-payment-policy", "kn-does-not-exist"];
+  const resolvable = [...new Set(cited)].filter((c) => vault.get(c));
+  const dc = parse(await toolset.log_decision.handler({
+    task: "Citation write-path probe",
+    trigger: "user_request",
+    plan: "1. Cite four resolvable ids (one repeated) and one that does not resolve",
+    citations: cited,
+    actions: "Logged a decision citing active-memory notes.",
+    outcome: "completed",
+    confidence: 0.9,
+  }));
+  const after = noteHashes();
+  const changed = Object.keys(after).filter((f) => before[f] !== after[f]);
+  const vanished = Object.keys(before).filter((f) => !(f in after));
+  console.log(`  ${dc.decision_id} cited [${cited.join(", ")}]`);
+  console.log(`  hashed ${Object.keys(before).length} active-memory notes before / ${Object.keys(after).length} after`);
+  console.log(`  changed: [${changed.join(", ")}]  vanished: [${vanished.join(", ")}]`);
+  check(changed.length === 0 && vanished.length === 0, "every skills/*.md and knowledge/*.md is byte-identical after the citing log_decision");
+  const ledgerAfter = ledgerLines();
+  const appended = ledgerAfter.slice(ledgerBefore.length).map((l) => JSON.parse(l));
+  console.log(`  compass/citations.jsonl ${ledgerBefore.length} → ${ledgerAfter.length} lines; appended ${JSON.stringify(appended)}`);
+  check(
+    ledgerAfter.length - ledgerBefore.length === resolvable.length,
+    `ledger grew by exactly ${resolvable.length} line(s) — one per resolvable cited note (repeat collapsed, unresolved not ledgered)`,
+  );
+  check(ledgerAfter.slice(0, ledgerBefore.length).join("\n") === ledgerBefore.join("\n"), "append-only: no prior ledger line was rewritten");
+  check(
+    appended.every((e) => e.decision_id === dc.decision_id && resolvable.includes(e.skill_id) && typeof e.timestamp === "string"),
+    "each appended line carries {skill_id, decision_id, timestamp} for a real note",
+  );
+  check(typeof dc.warning === "string" && dc.warning.includes("kn-does-not-exist"), "the unresolved citation is reported, not silently dropped");
+  check((await git.dirtyPaths()).length === 0, "the ledger was committed with the decision — working tree clean");
+}
 
-step(15, "revert the approval (behavior rollback) — via the real revert_memory handler");
-const r15 = parse(await toolset.revert_memory.handler({ commit_sha: approvalSha }));
-console.log(`  reverted ${r15.reverted} @ ${String(r15.revert_commit).slice(0, 8)}`);
-check(r15.reverted === approvalSha, "approval commit reverted");
+step(15, "SELF-CLEARING ATTACK REPLAYED: the agent cites the stale skills, audit must NOT go silent (ruling §1)");
+{
+  // The invigilation's demonstrated harm: one agent-only call cited the stale
+  // skills, and the next audit simply dropped the findings — a system clearing
+  // standing findings about itself, invisibly. SEMANTIC IMPLEMENTED: findings
+  // are not dropped, they CHANGE KIND — `stale-skill` becomes
+  // `stale-skill-cleared` and names the decision id(s) that cleared it.
+  const lineOf = (fs_) => fs_.filter((f) => f.heuristic.startsWith("stale-skill")).map((f) => `    ${f.heuristic} [${f.severity}] → ${f.subject}: ${f.detail}`).sort();
+  const aBefore = parse(await toolset.run_audit.handler({}));
+  const staleBefore = aBefore.findings.filter((f) => f.heuristic === "stale-skill").map((f) => f.subject).sort();
+  console.log("  BEFORE (agent has not cited them):");
+  console.log(lineOf(aBefore.findings).join("\n"));
+  const attack = parse(await toolset.log_decision.handler({
+    task: "Cite the stale skills (no human in this call)",
+    trigger: "user_request",
+    plan: "1. Cite every skill the last audit called stale",
+    citations: staleBefore,
+    actions: "Cited them.",
+    outcome: "completed",
+    confidence: 0.9,
+  }));
+  const aAfter = parse(await toolset.run_audit.handler({}));
+  console.log(`  AGENT-ONLY CALL: ${attack.decision_id} cited [${staleBefore.join(", ")}]`);
+  console.log("  AFTER:");
+  console.log(lineOf(aAfter.findings).join("\n"));
+  const clearedNow = aAfter.findings.filter((f) => f.heuristic === "stale-skill-cleared");
+  check(staleBefore.length > 0, `there were stale skills to attack: [${staleBefore.join(", ")}]`);
+  check(
+    staleBefore.every((s) => clearedNow.some((f) => f.subject === s && (f.cleared_by ?? []).includes(attack.decision_id))),
+    `every attacked skill is now reported CLEARED BY ${attack.decision_id} — named, not silent`,
+  );
+  check(
+    aAfter.findings.filter((f) => f.heuristic.startsWith("stale-skill")).length ===
+      aBefore.findings.filter((f) => f.heuristic.startsWith("stale-skill")).length,
+    "no stale-skill finding disappeared: the count is unchanged, the kind changed",
+  );
+  const reportAfter = fs.readFileSync(path.join(vaultPath, aAfter.report), "utf8");
+  console.log(`  audit report line(s):\n${reportAfter.split("\n").filter((l) => l.includes("stale-skill")).map((l) => `    ${l}`).join("\n")}`);
+  check(reportAfter.includes(attack.decision_id), `the human-facing report names ${attack.decision_id} as the clearing decision`);
+}
+
+step(16, "bin/revert.mjs WITHOUT --by is refused (exit 2) — a revert needs a named human (ruling §2)");
+{
+  const noActor = cliTry("revert.mjs", [approvalSha]);
+  console.log(`  exit ${noActor.status}: ${noActor.stderr.split("\n")[0]}`);
+  check(noActor.status === 2, "bin/revert.mjs <sha> with no --by exits 2 (usage)");
+  const blankActor = cliTry("revert.mjs", [approvalSha, "--by", "   "]);
+  console.log(`  exit ${blankActor.status}: ${blankActor.stderr.split("\n")[0]}`);
+  check(blankActor.status === 2, "bin/revert.mjs --by '   ' (blank actor) exits 2");
+  check(vault.get(promotedId) !== null, `the promoted skill ${promotedId} is untouched by the refused reverts`);
+}
+
+step(17, "blackbox revert must be REFUSED — through bin/revert.mjs (exit 1)");
+{
+  const r = cliTry("revert.mjs", [String(d1.commit), "--by", "jeremy"]);
+  console.log(`  exit ${r.status}: ${r.stderr.replace(/^/gm, "  ").trim()}`);
+  check(r.status === 1, "bin/revert.mjs exits 1 (policy refusal) on a [blackbox] commit");
+  check(r.stderr.includes("Refused"), "the refusal names itself a refusal");
+  check(vault.get(d1.decision_id) !== null, "decision record still present");
+}
+
+step(18, "human reverts the approval via bin/revert.mjs --by jeremy (behavior rollback)");
+const revertOut = cli("revert.mjs", [approvalSha, "--by", "jeremy"]);
+console.log(revertOut.trimEnd().replace(/^/gm, "  "));
+const revertLog = (await git.recentLog(1))[0];
+check(/^\[human\] revert [0-9a-f]{8} \(by jeremy\): \[human\] approve prop-\d+ /.test(revertLog.message), `revert commit names the human: ${revertLog.message}`);
 check(vault.get(promotedId) === null, `skill ${promotedId} gone after revert`);
 check(vault.get(propB) !== null, `proposal ${propB} restored to the queue`);
 check(vault.rulings().length === 1, "approval ruling reverted with the approval (reject ruling remains)");
 
-step(16, "truncated compass/rulings.json FAILS CLOSED — no mass re-propose (finding 3)");
+step(19, "an EMPTY revert reports honestly instead of claiming success (exit 3)");
+{
+  // simple-git reads git's exit-1-with-empty-stderr ("nothing to commit") as
+  // success, so VaultGit.revert used to return the CURRENT HEAD as the
+  // "revert_commit" — a governed tool making a false claim. Reverting the same
+  // approval a second time is the no-op case: its effect is already undone.
+  const headBefore = await git.head();
+  const r = cliTry("revert.mjs", [approvalSha, "--by", "jeremy"]);
+  console.log(`  exit ${r.status}: ${r.stderr.replace(/^/gm, "  ").trim()}`);
+  check(r.status === 3, "bin/revert.mjs exits 3 (runtime failure) on a revert that changes nothing");
+  check(/produced NO change|nothing was reverted/.test(r.stderr), "the message says nothing was reverted");
+  check(!/revert_commit|Reverted /.test(r.stdout), "no revert commit is reported on stdout");
+  check((await git.head()) === headBefore, "HEAD did not move");
+  check(!fs.existsSync(path.join(vaultPath, ".git", "REVERT_HEAD")), "no REVERT_HEAD left behind");
+  check((await git.dirtyPaths()).length === 0, "working tree clean after the honest refusal");
+}
+
+step(20, "truncated compass/rulings.json FAILS CLOSED — no mass re-propose (finding 3)");
 {
   const rulingsAbs = path.join(vaultPath, vault.rulingsRel);
   const intact = fs.readFileSync(rulingsAbs, "utf8");
@@ -246,14 +426,15 @@ step(16, "truncated compass/rulings.json FAILS CLOSED — no mass re-propose (fi
   check(!a5.findings.some((f) => f.heuristic === "uncited-decision" && f.subject === d1.decision_id), "after restoring the ledger, run_audit works and still honours the ruling");
 }
 
-step(17, "revert_memory of the [seed] baseline is REFUSED — vault survives, next call works (finding 2)");
+step(21, "the [seed] baseline / root commit is REFUSED through bin/revert.mjs — vault survives, next call works (finding 2)");
 {
   const log = await git.recentLog(50);
   const seed = log.find((l) => l.message.startsWith("[seed] "));
   const notesBefore = ["knowledge", "skill", "decision"].map((t) => `${t}:${vault.list(t).length}`).join(" ");
-  const r = parse(await toolset.revert_memory.handler({ commit_sha: seed.sha }));
-  console.log(`  ${seed.sha} ${seed.message}\n  ${r.error ?? JSON.stringify(r)}`);
-  check(typeof r.error === "string" && r.error.startsWith("Refused"), "revert_memory refused the [seed] baseline commit");
+  const r = cliTry("revert.mjs", [seed.sha, "--by", "jeremy"]);
+  console.log(`  ${seed.sha} ${seed.message}\n  exit ${r.status}: ${r.stderr.replace(/^/gm, "  ").trim()}`);
+  check(r.status === 1, "bin/revert.mjs exits 1 (policy refusal) on the [seed] baseline commit");
+  check(r.stderr.includes("Refused") && /baseline commit/.test(r.stderr), "the refusal names the baseline guard");
   const notesAfter = ["knowledge", "skill", "decision"].map((t) => `${t}:${vault.list(t).length}`).join(" ");
   check(notesAfter === notesBefore, `vault intact: ${notesAfter} (was ${notesBefore})`);
   check(!fs.existsSync(path.join(vaultPath, ".git", "REVERT_HEAD")), "no REVERT_HEAD left behind");
@@ -270,25 +451,22 @@ step(17, "revert_memory of the [seed] baseline is REFUSED — vault survives, ne
   check(typeof d3.decision_id === "string" && vault.get(d3.decision_id) !== null, `log_decision still works after the refusal (${d3.decision_id})`);
 }
 
-step(18, "a CONFLICTING revert is aborted and refused — never left mid-flight (finding 2 blast radius)");
+step(22, "a CONFLICTING revert is aborted and refused through bin/revert.mjs — never left mid-flight (finding 2 blast radius)");
 {
   // Reverting the [human] reject commit conflicts for real: it would re-add
   // proposed/prop-001.md, and a DIFFERENT prop-001.md exists today (nextId
   // recycles ids). Verified by hand: "CONFLICT (add/add)" plus a staged
   // "D compass/rulings.json" and .git/REVERT_HEAD. Before this fix that throw
   // escaped uncaught and every later commit — every later tool call — failed.
-  // A conflict is a runtime failure, so it throws (the [blackbox]/[seed] policy
-  // refusals answer as data) — per the [human] ruling's "clean throw" wording.
-  // "Clean" is the load-bearing word: aborted, tree clean, next call works.
-  let thrown = null;
-  try {
-    await toolset.revert_memory.handler({ commit_sha: rejectSha });
-  } catch (e) {
-    thrown = e;
-  }
-  console.log(`  ${String(thrown?.message).slice(0, 170)}`);
-  check(thrown instanceof Error && thrown.message.startsWith("Refused"), "conflicting revert threw a clean, named error");
-  check(String(thrown?.message).includes("revert --abort ran"), "git revert --abort was run");
+  // A conflict is a runtime FAILURE, so it throws inside VaultGit.humanRevert
+  // and the CLI exits 3 (the [blackbox]/[seed] POLICY refusals answer as data,
+  // exit 1) — per the [human] ruling's "clean throw" wording. "Clean" is the
+  // load-bearing word: aborted, tree clean, next call works.
+  const r = cliTry("revert.mjs", [rejectSha, "--by", "jeremy"]);
+  console.log(`  exit ${r.status}: ${r.stderr.slice(0, 300).replace(/^/gm, "  ").trim()}`);
+  check(r.status === 3, "bin/revert.mjs exits 3 (runtime failure) on a conflicting revert");
+  check(r.stderr.includes("Refused"), "conflicting revert reported a clean, named refusal");
+  check(r.stderr.includes("revert --abort ran"), "git revert --abort was run");
   check(!fs.existsSync(path.join(vaultPath, ".git", "REVERT_HEAD")), "no REVERT_HEAD left behind");
   check((await git.dirtyPaths()).length === 0, "no staged deletions: working tree clean");
   const d4 = parse(await toolset.log_decision.handler({
@@ -303,8 +481,26 @@ step(18, "a CONFLICTING revert is aborted and refused — never left mid-flight 
   check(typeof d4.decision_id === "string" && vault.get(d4.decision_id) !== null, `log_decision still works after the aborted revert (${d4.decision_id})`);
 }
 
-step(19, "git log (the audit trail)");
-console.log((await git.recentLog(12)).map((l) => `  ${l.sha} ${l.message}`).join("\n"));
+step(23, "a damaged compass/citations.jsonl FAILS CLOSED too — the audit refuses rather than inventing or erasing findings");
+{
+  const abs = path.join(vaultPath, vault.citationsRel);
+  const intact = fs.readFileSync(abs, "utf8");
+  fs.appendFileSync(abs, '{"skill_id": "truncated-lin\n');
+  let refusal = null;
+  try {
+    await toolset.run_audit.handler({});
+  } catch (e) {
+    refusal = e.message;
+  }
+  console.log(`  refused: ${String(refusal).slice(0, 140)}`);
+  check(typeof refusal === "string" && refusal.includes("citations.jsonl"), "run_audit threw on a damaged citation ledger instead of reading it short");
+  fs.writeFileSync(abs, intact); // restore: git-tracked and intact upstream
+  const back = parse(await toolset.run_audit.handler({}));
+  check(back.findings.some((f) => f.heuristic.startsWith("stale-skill")), "after restoring the ledger, the audit reports skill citation status again");
+}
+
+step(24, "git log (the audit trail)");
+console.log((await git.recentLog(14)).map((l) => `  ${l.sha} ${l.message}`).join("\n"));
 
 if (failed) {
   console.log(`\nSMOKE TEST FAILED (${failed} check(s))`);

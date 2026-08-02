@@ -23,10 +23,12 @@ curl -X POST https://<tunnel-host>/mcp \
    - Transport: streamable HTTP, no auth (tunnel is anonymous for the demo window)
    - Approve all tools if the portal asks for per-tool consent.
 5. Sanity ping in the playground: "List your tools." Atlas should name the
-   governed seven (recall_knowledge, get_skill, log_decision, run_audit,
-   list_proposals, revert_memory, memory_log) — plus `ground_foundry_iq` when
-   Foundry IQ grounding is configured (8 total). approve/reject are NOT tools:
-   humans rule via `bin/approve.mjs` / `bin/reject.mjs` on their own machine.
+   governed six (recall_knowledge, get_skill, log_decision, run_audit,
+   list_proposals, memory_log) — plus `ground_foundry_iq` when Foundry IQ
+   grounding is configured (7 total). approve/reject/revert are NOT tools:
+   humans rule via `bin/approve.mjs` / `bin/reject.mjs` / `bin/revert.mjs
+   --by <name>` on their own machine (`[human]` ruling 2026-08-02 — revert
+   undoes a human ruling, so it needs a named human like the other two).
 
 If the connection fails: the client must send
 `Accept: application/json, text/event-stream`; the server is stateless

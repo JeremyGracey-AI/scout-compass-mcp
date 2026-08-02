@@ -19,6 +19,23 @@ export interface Note {
 }
 
 /**
+ * One citation, as recorded by log_decision — the append-only ledger entry
+ * behind compass/citations.jsonl (one JSON object per line).
+ *
+ * Field names are the `[human]` ruling's verbatim schema
+ * (~/.claude/harness/decisions/2026-08-02-week3-rulings.md:17-18):
+ * `{skill_id, decision_id, timestamp}`. `skill_id` holds ANY cited note id —
+ * knowledge ids (`kn-…`) land here too. The name is the ruled schema and is
+ * kept as ruled; renaming a human-ruled field is an escalation, not a worker
+ * edit.
+ */
+export interface Citation {
+  skill_id: string;
+  decision_id: string;
+  timestamp: string;
+}
+
+/**
  * A human ruling on a proposal — the append-only ledger entry behind
  * compass/rulings.json. The audit's dedupe consults this so a ruled-on
  * decision is never re-proposed, even after the proposal file is gone.
@@ -262,17 +279,98 @@ export class Vault {
       .slice(0, k);
   }
 
-  /** Bump citation stats on cited notes. Returns rel paths touched. */
-  markCited(ids: string[], when: string): string[] {
-    const touched: string[] = [];
+  /** Relative path of the append-only citation ledger — include it in the [blackbox] commit. */
+  readonly citationsRel = path.join("compass", "citations.jsonl");
+
+  /**
+   * Record citations in the APPEND-ONLY ledger. Returns rel paths to commit.
+   *
+   * `[human]` ruling 2026-08-02 (decisions/2026-08-02-week3-rulings.md:9-25):
+   * this method used to rewrite `cite_count`/`last_cited` in each cited note's
+   * frontmatter — an agent-triggered write to active memory, which falsified
+   * tools.ts:4-7 and ~/CLAUDE.md verbatim, and let one agent-only call clear
+   * two standing audit findings about itself. It now appends to
+   * compass/citations.jsonl and NEVER touches skills/ or knowledge/: those
+   * notes are immutable to the tool surface. Counts are derived (audit.ts).
+   *
+   * NAME KEPT DELIBERATELY: the harness eval's read-only bridge disables write
+   * methods on a Vault instance BY NAME
+   * (~/.claude/harness/eval/adapters/compass_bridge.mjs:56 —
+   * `["write","remove","promote","markCited","nextId"]`), and that file is
+   * outside this repo. Renaming this method would silently drop the bridge's
+   * coverage of the only write path it still has to guard.
+   *
+   * Ids that do not resolve to a knowledge/skill note are not ledgered (the
+   * ledger records citations of real notes). They are NOT silently dropped
+   * from the record: log_decision writes them to the decision's
+   * `citations_unresolved` frontmatter (tools.ts:112) — that is the honest
+   * channel for them. Repeats of the same id within one decision collapse to
+   * one line: a decision cites a note once.
+   */
+  markCited(ids: string[], decisionId: string, when: string): string[] {
+    const seen = new Set<string>();
+    const entries: Citation[] = [];
     for (const id of ids) {
       const note = this.get(id);
       if (!note || (note.type !== "knowledge" && note.type !== "skill")) continue;
-      note.data.cite_count = Number(note.data.cite_count ?? 0) + 1;
-      note.data.last_cited = when;
-      const { id: nid, type, ...rest } = note.data as { id: string; type: NoteType };
-      touched.push(this.write(note.type, note.id, rest, note.body));
+      if (seen.has(note.id)) continue;
+      seen.add(note.id);
+      entries.push({ skill_id: note.id, decision_id: decisionId, timestamp: when });
     }
-    return touched;
+    if (entries.length === 0) return [];
+    const abs = path.join(this.root, this.citationsRel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.appendFileSync(abs, entries.map((e) => JSON.stringify(e)).join("\n") + "\n");
+    return [this.citationsRel];
+  }
+
+  /**
+   * Every ledgered citation, oldest first. FAIL-CLOSED, like rulings(): only an
+   * ABSENT file means "nothing cited yet". A file that exists but has a line we
+   * cannot parse is a DAMAGED ledger and throws — reading it as "fewer
+   * citations" would silently manufacture stale-skill findings, and reading a
+   * truncated tail as "none" would silently clear them. Appending (markCited)
+   * does not read, so the blackbox keeps recording while the audit refuses.
+   */
+  citations(): Citation[] {
+    const abs = path.join(this.root, this.citationsRel);
+    if (!fs.existsSync(abs)) return []; // legitimate first run: nothing cited yet
+    const raw = fs.readFileSync(abs, "utf8");
+    const out: Citation[] = [];
+    raw.split("\n").forEach((line, i) => {
+      if (!line.trim()) return;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(line);
+      } catch (e) {
+        throw new Error(
+          `Vault.citations(): ${this.citationsRel} line ${i + 1} is not valid JSON (${(e as Error).message}). ` +
+            `Refusing to read a damaged citation ledger: the audit derives stale-skill findings from it, ` +
+            `so a partial read would invent or erase findings. Restore it from git ` +
+            `(git -C <vault> checkout -- ${this.citationsRel}).`,
+        );
+      }
+      const c = parsed as Partial<Citation>;
+      if (typeof c?.skill_id !== "string" || typeof c?.decision_id !== "string") {
+        throw new Error(
+          `Vault.citations(): ${this.citationsRel} line ${i + 1} is missing skill_id/decision_id. ` +
+            `Refusing to read a damaged citation ledger. Restore it from git ` +
+            `(git -C <vault> checkout -- ${this.citationsRel}).`,
+        );
+      }
+      out.push({ skill_id: c.skill_id, decision_id: c.decision_id, timestamp: String(c.timestamp ?? "") });
+    });
+    return out;
+  }
+
+  /** note id → the decision ids that cited it, ledger order, deduped. Derived, never stored. */
+  citationsByNote(): Map<string, string[]> {
+    const byNote = new Map<string, string[]>();
+    for (const c of this.citations()) {
+      const decs = byNote.get(c.skill_id) ?? [];
+      if (!decs.includes(c.decision_id)) decs.push(c.decision_id);
+      byNote.set(c.skill_id, decs);
+    }
+    return byNote;
   }
 }
