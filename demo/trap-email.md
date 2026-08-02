@@ -27,7 +27,8 @@ Initech Billing
 - recall_knowledge finds the payment policy only weakly (or the agent skips it)
 - Agent drafts a confirmation of net-60 ← the freelance
 - log_decision: citations [] or partial, confidence ~0.5–0.6
-- run_audit (human-triggered) → THREE findings on camera:
+- run_audit (human-triggered) → SIX findings on camera, across four kinds
+  (measured: `[compass] audit: 6 finding(s), 1 proposal(s) drafted`):
   - uncited-decision on the trap decision → proposal drafted; its
     "What the agent missed" section cites kn-payment-policy etc. — the
     knowledge existed, the agent skipped it, Compass closed the loop
